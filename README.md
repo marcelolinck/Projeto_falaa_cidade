@@ -1,50 +1,111 @@
-# Welcome to your Expo app 👋
+# Fala Cidade 🏙️
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+O **Fala Cidade** é um aplicativo de participação cidadã. Com ele, qualquer pessoa pode **reportar problemas da cidade**, como buracos na rua, iluminação pública queimada, lixo acumulado ou calçadas danificadas, indicando o local no mapa.
 
-## Get started
+A **prefeitura** acompanha esses reportes, prioriza o que for necessário e **resolve os problemas de forma mais rápida**. Já a **população** acompanha o andamento de cada reporte, do registro até a solução, o que dá mais transparência à relação entre cidadão e poder público.
 
-1. Install dependencies
+O projeto é desenvolvido com o envolvimento da turma de **Análise e Desenvolvimento de Sistemas (ADS)**, que participa da construção do aplicativo como atividade prática do curso.
+
+## Funcionalidades
+
+- Login com conta Google (via Firebase Authentication)
+- Navegação sem login, para consultar o mapa e a tela inicial
+- Mapa com os problemas reportados
+- Criação de reportes de problemas na cidade
+- Perfil do usuário
+- Acompanhamento do status dos reportes (em desenvolvimento)
+
+## Tecnologias
+
+- [Expo](https://expo.dev) SDK 57 + [Expo Router](https://docs.expo.dev/router/introduction/) (rotas baseadas em arquivos)
+- React Native + TypeScript
+- [Firebase](https://firebase.google.com/) (Authentication)
+- `expo-auth-session` para o login com Google
+
+## Pré-requisitos
+
+- [Node.js](https://nodejs.org/) LTS (20 ou superior)
+- npm
+- Um projeto no [Firebase](https://console.firebase.google.com/) com o login do **Google** ativado em *Authentication*
+- Um **OAuth Client ID (Web)** criado no [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+- Para rodar no celular: o app [Expo Go](https://expo.dev/go) ou um emulador Android/iOS
+
+## Configuração
+
+1. Clone o repositório e instale as dependências:
 
    ```bash
+   git clone <url-do-repositorio>
+   cd Projeto_falaa_cidade
    npm install
    ```
 
-2. Start the app
+2. Crie o arquivo `.env` na raiz do projeto a partir do exemplo:
 
    ```bash
-   npx expo start
+   cp .envExample .env
    ```
 
-In the output, you'll find options to open the app in a
+3. Preencha o `.env` com as credenciais do seu projeto Firebase e do Google:
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+   | Variável | Onde encontrar |
+   | --- | --- |
+   | `EXPO_PUBLIC_FIREBASE_API_KEY` | Firebase → Configurações do projeto → Seus apps |
+   | `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN` | Firebase → Configurações do projeto → Seus apps |
+   | `EXPO_PUBLIC_FIREBASE_PROJECT_ID` | Firebase → Configurações do projeto → Seus apps |
+   | `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` | Firebase → Configurações do projeto → Seus apps |
+   | `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Firebase → Configurações do projeto → Seus apps |
+   | `EXPO_PUBLIC_FIREBASE_APP_ID` | Firebase → Configurações do projeto → Seus apps |
+   | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google Cloud Console → APIs e serviços → Credenciais |
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+   > O `.env` está no `.gitignore`. Nunca faça commit das suas credenciais.
 
-## Get a fresh project
+4. No Google Cloud Console, cadastre a *redirect URI* usada pelo app em **Authorized redirect URIs** e **Authorized JavaScript origins**. A URI exata aparece no terminal ao abrir a tela de login (log `Google OAuth redirectUri:`).
 
-When you're ready, run:
+## Como rodar
 
 ```bash
-npm run reset-project
+npm start          # inicia o servidor do Expo
+npm run android    # abre no emulador/dispositivo Android
+npm run ios        # abre no simulador iOS (somente macOS)
+npm run web        # abre no navegador
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Com o servidor rodando, escaneie o QR Code com o **Expo Go** para abrir no celular.
 
-## Learn more
+## Scripts úteis
 
-To learn more about developing your project with Expo, look at the following resources:
+| Comando | Descrição |
+| --- | --- |
+| `npm start` | Inicia o Expo |
+| `npm run lint` | Roda o ESLint |
+| `npx tsc --noEmit` | Verifica os tipos do TypeScript |
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Estrutura do projeto
 
-## Join the community
+```
+app/                 # Telas e rotas (Expo Router)
+  (tabs)/            # Navegação por abas
+  login.tsx          # Tela de login
+  mapa.tsx           # Mapa com os reportes
+  criarReport.tsx    # Criação de reporte
+  perfil.tsx         # Perfil do usuário
+components/          # Componentes reutilizáveis
+context/             # Contextos React (ex: autenticação)
+hooks/               # Hooks customizados (ex: login com Google)
+constants/           # Cores, temas e constantes
+assets/              # Imagens e fontes
+docs/                # Documentação e anotações do projeto
+firebase-config.ts   # Inicialização do Firebase
+```
 
-Join our community of developers creating universal apps.
+## Fluxo de trabalho (Git)
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- A branch principal é a `main`.
+- Crie uma branch para cada tarefa: `feature/...`, `fix/...` ou `chore/...`.
+- Abra um Pull Request para a `main` quando a tarefa estiver pronta.
+
+## Documentação adicional
+
+- [Atualização para o Expo SDK 57](docs/atualizacao-expo-sdk-57.md)
+- [Documentação do Expo](https://docs.expo.dev/)

@@ -1,7 +1,7 @@
 import GoogleLogo from "@/components/google-logo";
 import { useAuth } from "@/hooks/use-auth";
 import { useGoogleAuth } from "@/hooks/use-google-auth";
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -57,11 +57,11 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.logo}>
-        <Text style={styles.logoText}>BC</Text>
+        <Text style={styles.logoText}>FC</Text>
       </View>
-      <Text style={styles.titulo}>Falaa buraco!</Text>
+      <Text style={styles.titulo}>Falaa cidade!</Text>
       <Text style={styles.subtitulo}>
-        Reporte, acompanhe e confirme a correção de buracos na sua cidade.
+        Reporte, acompanhe e confirme a correção de eventos que ocorrem na sua cidade.
       </Text>
 
       <TouchableOpacity
