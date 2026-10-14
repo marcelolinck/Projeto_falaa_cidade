@@ -8,9 +8,11 @@
     "scheme": "fasipe",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.fasipe.falacidade"
     },
     "android": {
+      "package": "com.fasipe.falacidade",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -46,6 +48,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9731121f-b7e2-4f13-a707-eff59569f7e0"
+      }
     }
   }
 }

@@ -42,3 +42,7 @@ app-example
 # generated native folders
 /ios
 /android
+
+# credenciais locais (Google OAuth / keystore)
+falaCidadeWeb.json
+keystore.md

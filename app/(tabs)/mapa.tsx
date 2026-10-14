@@ -1,5 +1,5 @@
-import { Link, useLocalSearchParams } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useAuth } from "@/hooks/use-auth";
+import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const cores = {
@@ -11,11 +11,31 @@ const cores = {
   alerta: "#b8860b",
 };
 
-export default function Mapa() {
-  const { logado } = useLocalSearchParams<{ logado?: string }>();
-  const estaLogado = logado === "true";
 
-  console.log("Parâmetro logado recebido:", logado);
+interface PerfilParams {
+  uid?: string;
+  displayName?: string;
+  email?: string;
+  photoURL?: string;
+  emailVerified?: boolean;
+}
+
+export default function Mapa() {
+  // Com abas, não dá pra depender dos params da URL (cada aba é uma rota
+  // separada), então o usuário logado vem direto do AuthProvider.
+  const { user, isLogin: estaLogado } = useAuth();
+
+  const perfil: PerfilParams = {
+    uid: user?.uid,
+    displayName: user?.displayName ?? undefined,
+    email: user?.email ?? undefined,
+    photoURL: user?.photoURL ?? undefined,
+    emailVerified: user?.emailVerified,
+  };
+
+  console.log("Estou na tela de mapas")
+  console.log("Perfil do usuário:", perfil);
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -26,11 +46,9 @@ export default function Mapa() {
               Você está logado
             </Text>
             <Text style={styles.titulo}>Aqui vai o mapa</Text>
-            <Link href="/perfil" asChild>
-              <Pressable>
-                <Text style={styles.link}>Perfil do usuário</Text>
-              </Pressable>
-            </Link>
+            <Text style={{ color: cores.preto, fontSize: 16, marginTop: 8 }}>
+              Bem-vindo, {perfil.displayName || "usuário"}!
+            </Text>
           </>
         ) : (
           <Text style={[styles.statusTexto, { color: cores.alerta }]}>

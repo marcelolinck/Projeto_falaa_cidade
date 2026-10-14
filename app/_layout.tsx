@@ -6,7 +6,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export const unstable_settings = {
   //anchor: "(tabs)",
-  initialRouteName: "login",
+  initialRouteName: "index",
 };
 
 export default function RootLayout() {
@@ -18,16 +18,10 @@ export default function RootLayout() {
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
         <Stack>
           <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen
             name="modal"
             options={{ presentation: "modal", title: "Modal" }}
-          />
-          <Stack.Screen name="mapa" options={{ title: "Mapa dos buracos" }} />
-          <Stack.Screen
-            name="perfil"
-            options={{ title: "Perfil do usuario" }}
           />
         </Stack>
       </ThemeProvider>

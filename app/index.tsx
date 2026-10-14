@@ -33,10 +33,8 @@ export default function HomeScreen() {
   // `user` (via onAuthStateChanged) e daí sim navegamos pra tela de mapa.
   useEffect(() => {
     if (user) {
-      router.push({
-        pathname: "/mapa",
-        params: { logado: "true" },
-      });
+      // As abas leem o usuário do useAuth(), então não precisa mais mandar params.
+      router.replace("/mapa");
     }
   }, [user]);
 
@@ -82,11 +80,7 @@ export default function HomeScreen() {
         (LGPD).
       </Text>
       <Link
-        //href="/mapa"
-        href={{
-          pathname: "/mapa",
-          params: { logado: "false" },
-        }}
+        href="/mapa"
         asChild
       >
         <TouchableOpacity activeOpacity={0.8}>

@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from "expo-router";
+import { useAuth } from "@/hooks/use-auth";
 import { StyleSheet, Text } from "react-native";
 
 const cores = {
@@ -12,8 +12,7 @@ const cores = {
 };
 
 export default function Perfil() {
-  const { logado } = useLocalSearchParams<{ logado?: string }>();
-  const estaLogado = logado === "true" ? true : false;
+  const { isLogin: estaLogado } = useAuth();
 
   return (
     <>

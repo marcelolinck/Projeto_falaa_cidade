@@ -11,10 +11,12 @@ export function useGoogleAuth() {
   // `request` só fica pronto depois que o clientId é carregado; `response` é o
   // resultado do login (sucesso, erro ou cancelado) depois que o usuário interage.
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    // Mesmo client ID pra web/Android/iOS por enquanto (webClientId funciona nos 3
-    // no Expo Go/web; se um dia gerar build nativa, aí sim precisa de
-    // iosClientId/androidClientId próprios cadastrados no Google Cloud).
-    clientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    // Cada plataforma precisa do seu próprio client ID no Google Cloud: o client
+    // "Web" só aceita redirect http(s), então no iOS/Android o Google bloqueia
+    // com "Erro 400: invalid_request". Não funciona no Expo Go, só em dev build.
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
   });
 
   // Erro do próprio login com o Google (ex: usuário cancelou, client id errado).
