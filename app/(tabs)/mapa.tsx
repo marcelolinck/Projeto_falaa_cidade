@@ -1,30 +1,44 @@
-import { Link, useLocalSearchParams } from "expo-router";
+import { useAuth } from "@/hooks/use-auth";
+// Paleta de cores única do projeto (arquivo styles/index.tsx).
+// Antes cada tela tinha sua própria cópia do objeto `cores`.
+import { cores } from "@/styles";
+import { Image } from 'expo-image';
+import { Link } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const cores = {
-  verde: "#108245",
-  preto: "#161a20",
-  cinzaClaro: "#8a93a1",
-  bgBrancoGelo: "#f6f8fa",
-  branco: "#ffffff",
-  alerta: "#b8860b",
-};
 
 export default function Mapa() {
-  const { logado } = useLocalSearchParams<{ logado?: string }>();
-  const estaLogado = logado === "true";
 
-  console.log("Parâmetro logado recebido:", logado);
+  // `useAuth()` lê o usuário logado do AuthContext (que conversa com o Firebase).
+  // Antes a gente passava `?logado=true` pela URL; agora qualquer tela
+  // consegue saber quem está logado sem receber parâmetros.
+  // `isLogin: estaLogado` = pega o campo `isLogin` e renomeia para `estaLogado`.
+  const { user, isLogin: estaLogado } = useAuth();
+
+  const perfil = user ? user : 'sem informação disponivel';
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.status}>
+        {/* Renderização condicional: condição ? (se verdadeiro) : (se falso) */}
         {estaLogado ? (
           <>
             <Text style={[styles.statusTexto, { color: cores.verde }]}>
               Você está logado
             </Text>
+            <Text style={styles.titulo}>User: {perfil.displayName}</Text>
+            <Text style={styles.titulo}>Email: {perfil.email}</Text>
+            
+            {/* Foto da conta Google, carregada da internet pela URL (uri) */}
+            <Image
+              style={styles.image}
+              source={{ uri: perfil.photoURL }}
+             // placeholder={{ blurhash }}
+              contentFit="cover"
+              transition={1000}
+            />
+
             <Text style={styles.titulo}>Aqui vai o mapa</Text>
             <Link href="/perfil" asChild>
               <Pressable>
@@ -70,5 +84,14 @@ const styles = StyleSheet.create({
     color: cores.preto,
     fontSize: 18,
     fontWeight: "600",
+  },
+  image: {
+   // flex: 1,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    marginTop: 20,
+    marginBottom: 20,
+    backgroundColor: '#0553',
   },
 });

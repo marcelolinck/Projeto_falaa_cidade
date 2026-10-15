@@ -1,25 +1,14 @@
 import GoogleLogo from "@/components/google-logo";
 import { useAuth } from "@/hooks/use-auth";
 import { useGoogleAuth } from "@/hooks/use-google-auth";
+import { cores } from "@/styles";
 import { useEffect } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Link, router } from "expo-router";
 
-/**
- * Paleta de cores que será usado no projeto por completo
- * Deve ser usado em todas as telas.
- */
-const cores = {
-  verde: "#108245", // verde de marca — botão primário, logo
-  verdeEscuro: "#0c6b38", // verde mais escuro — usado em estado "pressed"
-  preto: "#161a20", // cor do texto principal (títulos)
-  cinzaEscuro: "#5b6472", // cor do texto secundário (subtítulo)
-  cinzaClaro: "#8a93a1", // cor do texto mais apagado (texto legal/LGPD)
-  bgBrancoGelo: "#f6f8fa", // fundo geral da tela
-  branco: "#ffffff",
-};
+
 
 export default function HomeScreen() {
   // `user` vem do Firebase (via AuthProvider) e só deixa de ser null depois
@@ -33,10 +22,9 @@ export default function HomeScreen() {
   // `user` (via onAuthStateChanged) e daí sim navegamos pra tela de mapa.
   useEffect(() => {
     if (user) {
-      router.push({
-        pathname: "/mapa",
-        params: { logado: "true" },
-      });
+      // `replace` troca a tela atual em vez de empilhar uma nova (`push`).
+      // Assim, ao apertar "voltar" no mapa, o usuário não cai de novo no login.
+      router.replace("/mapa");
     }
   }, [user]);
 

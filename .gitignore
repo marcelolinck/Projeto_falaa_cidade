@@ -34,6 +34,9 @@ yarn-error.*
 .env*.local
 .env
 
+# credenciais do Google OAuth (contém client_secret)
+falaCidadeWeb.json
+
 # typescript
 *.tsbuildinfo
 
