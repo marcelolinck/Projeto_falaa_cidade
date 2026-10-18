@@ -19,15 +19,6 @@ export default function RootLayout() {
         <Stack>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="modal"
-            options={{ presentation: "modal", title: "Modal" }}
-          />
-          <Stack.Screen name="mapa" options={{ title: "Mapa dos buracos" }} />
-          <Stack.Screen
-            name="perfil"
-            options={{ title: "Perfil do usuario" }}
-          />
         </Stack>
       </ThemeProvider>
     </AuthProvider>
