@@ -1,9 +1,18 @@
 import GoogleLogo from "@/components/google-logo";
+import { traduzErroFirebase } from "@/constants/erros-firebase";
+import { auth } from "@/firebase-config";
 import { useAuth } from "@/hooks/use-auth";
 import { useGoogleAuth } from "@/hooks/use-google-auth";
 import { cores } from "@/styles";
-import { useEffect } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { useEffect, useState } from "react";
+import {
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Link, router } from "expo-router";
@@ -18,15 +27,35 @@ export default function HomeScreen() {
   // de login do Google; `error` guarda qualquer falha do processo.
   const { request, promptAsync, error } = useGoogleAuth();
 
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [erroLogin, setErroLogin] = useState<string | null>(null);
+
   // Assim que o usuário loga com sucesso no Firebase, o AuthProvider atualiza
   // `user` (via onAuthStateChanged) e daí sim navegamos pra tela de mapa.
   useEffect(() => {
     if (user) {
       // `replace` troca a tela atual em vez de empilhar uma nova (`push`).
       // Assim, ao apertar "voltar" no mapa, o usuário não cai de novo no login.
-      router.replace("/mapa");
+      // Quem entrou com e-mail e senha mas ainda não clicou no link de
+      // confirmação vai para a tela de verificação. (Contas Google já
+      // chegam com `emailVerified = true`.)
+      router.replace(user.emailVerified ? "/mapa" : "/verificar-email");
     }
   }, [user]);
+
+  /**
+   * Login com e-mail e senha. Se der certo, o AuthProvider atualiza `user`
+   * e o useEffect acima faz a navegação.
+   */
+  async function handleEmailLogin() {
+    setErroLogin(null);
+    try {
+      await signInWithEmailAndPassword(auth, email.trim(), senha);
+    } catch (e) {
+      setErroLogin(traduzErroFirebase(e));
+    }
+  }
 
   useEffect(() => {
     if (error) {
@@ -52,18 +81,63 @@ export default function HomeScreen() {
         Reporte, acompanhe e confirme a correção de eventos que ocorrem na sua cidade.
       </Text>
 
+      <TextInput
+        style={styles.input}
+        placeholder="E-mail"
+        placeholderTextColor={cores.cinzaClaro}
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoComplete="email"
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Senha"
+        placeholderTextColor={cores.cinzaClaro}
+        value={senha}
+        onChangeText={setSenha}
+        secureTextEntry
+      />
+      {erroLogin && <Text style={styles.erro}>{erroLogin}</Text>}
+
+      {/* Leva o e-mail já digitado para a tela de recuperação. */}
+      <Link
+        href={{ pathname: "/esqueci-senha", params: { email: email.trim() } }}
+        asChild
+      >
+        <TouchableOpacity activeOpacity={0.8} style={styles.esqueciSenha}>
+          <Text style={styles.esqueciSenhaTexto}>Esqueci minha senha</Text>
+        </TouchableOpacity>
+      </Link>
+
       <TouchableOpacity
         activeOpacity={0.8}
-        style={styles.botao}
+        style={[styles.botao, styles.botaoEmail]}
+        onPress={handleEmailLogin}
+      >
+        <Text style={styles.textoBotao}>Entrar</Text>
+      </TouchableOpacity>
+
+      <Link href="/cadastro" asChild>
+        <TouchableOpacity activeOpacity={0.8}>
+          <Text style={styles.mapaSemLogin}>Não tem conta? Cadastre-se</Text>
+        </TouchableOpacity>
+      </Link>
+
+      <Text style={styles.ou}>ou</Text>
+
+      <TouchableOpacity
+        activeOpacity={0.8}
+        // Visual do botão oficial do Google: fundo branco, borda cinza, texto escuro.
+        style={[styles.botao, styles.botaoGoogle]}
         // Sem `request` carregado ainda não tem como abrir o login (client id
         // não pronto), então o botão fica desabilitado até esse momento.
         disabled={!request}
         onPress={() => handleGoogleLogin()}
       >
-        <View style={styles.googleIconCircle}>
-          <GoogleLogo size={20} />
-        </View>
-        <Text style={styles.textoBotao}>Entrar com o Google</Text>
+        <GoogleLogo size={20} />
+        <Text style={styles.textoBotaoGoogle}>Entrar com o Google</Text>
       </TouchableOpacity>
       <Text style={styles.rodape}>
         Ao continuar, você concorda com os Termos e a Política de Privacidade
@@ -139,6 +213,44 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     flexDirection: "row", // Adiciona a propriedade flexDirection para alinhar os elementos horizontalmente
   },
+  botaoEmail: {
+    backgroundColor: cores.azul,
+    padding: 16,
+  },
+  input: {
+    width: 300,
+    backgroundColor: cores.branco,
+    borderWidth: 1,
+    borderColor: cores.cinzaClaro,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    color: cores.preto,
+    marginBottom: 12,
+  },
+  erro: {
+    color: cores.alerta,
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  esqueciSenha: {
+    width: 300,
+    alignItems: "flex-end",
+    marginTop: -4,
+    marginBottom: 12,
+  },
+  esqueciSenhaTexto: {
+    color: cores.verde,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  ou: {
+    color: cores.cinzaClaro,
+    fontSize: 15,
+    marginVertical: 12,
+  },
   textoBotao: {
     marginStart: 10,
     color: cores.branco,
@@ -151,19 +263,16 @@ const styles = StyleSheet.create({
     color: cores.verde,
     marginTop: 10,
   },
-  googleIconText: {
-    color: cores.branco,
-    fontSize: 20,
-    fontWeight: 800,
-    marginBottom: 10,
-    marginRight: 10,
-  },
-  googleIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  botaoGoogle: {
     backgroundColor: cores.branco,
-    alignItems: "center",
-    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: cores.googleBorda,
+    padding: 16,
+  },
+  textoBotaoGoogle: {
+    marginStart: 12,
+    color: cores.googleTexto,
+    fontSize: 18,
+    fontWeight: "500",
   },
 });

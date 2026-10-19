@@ -9,7 +9,7 @@ export type AuthState = {
   isLogin: boolean;
   isReady: boolean;
   user: User | null;
-  signOut: () => void;
+  signOut: () => Promise<void>;
 };
 export const AuthContext = createContext<AuthState>({} as AuthState);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -22,8 +22,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     return unsubscribe;
   }, []);
+  // Retorna a Promise para quem chamar poder esperar (`await`) o logout
+  // terminar antes de navegar. Sem isso, a tela inicial ainda veria o
+  // usuário logado e o mandaria de volta para o mapa.
   function signOut() {
-    firebaseSignOut(auth);
+    return firebaseSignOut(auth);
   }
   return (
     <AuthContext.Provider value={{ isLogin: !!user, isReady, user, signOut }}>
