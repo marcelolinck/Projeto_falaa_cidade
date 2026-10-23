@@ -18,8 +18,16 @@ export default function RootLayout() {
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
         <Stack>
           <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="cadastro" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="cadastro" options={{ title: "Cadastro" }} />
+          <Stack.Screen
+            name="esqueci-senha"
+            options={{ title: "Recuperar senha" }}
+          />
+          <Stack.Screen
+            name="verificar-email"
+            options={{ headerShown: false }}
+          />
         </Stack>
       </ThemeProvider>
     </AuthProvider>

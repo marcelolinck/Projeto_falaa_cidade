@@ -59,7 +59,7 @@ export default function Mapa() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: cores.bgBrancoGelo,
+//    backgroundColor: cores.bgBrancoGelo,
     alignItems: "center",
     paddingHorizontal: 20,
     paddingTop: 20,
