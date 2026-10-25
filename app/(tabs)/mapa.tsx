@@ -1,14 +1,14 @@
 import { MapaView } from "@/components/mapa-view";
 import { useAuth } from "@/hooks/use-auth";
-import { useCity } from "@/hooks/use-city";
+import { useCidade } from "@/hooks/use-cidade";
 import { cores } from "@/styles";
 import { Feather } from "@react-native-vector-icons/feather";
 import { Linking, Pressable, StyleSheet, Text, View, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Mapa() {
-  const { user } = useAuth();
-  const { cidade, uf, coords, status, atualizar } = useCity();
+  const { user } = useAuth(); // usuário logado (Firebase)
+  const { cidade, uf, coordenadas, status, atualizar } = useCidade();
 
   // Iniciais do nome para o avatar ("Marcelo Linck" -> "ML"). Sem login: ícone.
   const iniciais = user?.displayName
@@ -20,11 +20,11 @@ export default function Mapa() {
 
   const titulo = cidade
     ? `${cidade}${uf ? `, ${uf}` : ""}`
-    : status === "loading"
+    : status === "carregando"
       ? "Localizando..."
       : "Sua cidade";
 
-  const semLocalizacao = status === "denied" || status === "error";
+  const semLocalizacao = status === "negado" || status === "erro";
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -40,23 +40,23 @@ export default function Mapa() {
       </View>
 
       <View style={styles.mapaBox}>
-        {status === "loading" ? (
+        {status === "carregando" ? (
           <ActivityIndicator size="large" color={cores.verde} />
         ) : (
           // `key` recria o mapa quando a posição chega, para ele abrir centralizado
-          <MapaView key={coords ? "com-gps" : "sem-gps"} coords={coords} style={styles.mapa} />
+          <MapaView key={coordenadas ? "com-gps" : "sem-gps"} coordenadas={coordenadas} style={styles.mapa} />
         )}
 
         {semLocalizacao && (
           <View style={styles.aviso}>
             <Text style={styles.avisoTexto}>
-              {status === "denied"
+              {status === "negado"
                 ? "Permita a localização para ver os buracos perto de você."
                 : "Não foi possível obter sua localização."}
             </Text>
-            <Pressable onPress={status === "denied" ? Linking.openSettings : atualizar}>
+            <Pressable onPress={status === "negado" ? Linking.openSettings : atualizar}>
               <Text style={styles.avisoLink}>
-                {status === "denied" ? "Abrir ajustes" : "Tentar de novo"}
+                {status === "negado" ? "Abrir ajustes" : "Tentar de novo"}
               </Text>
             </Pressable>
           </View>

@@ -2,7 +2,7 @@ import { cores } from "@/styles";
 import { StyleProp, Text, View, ViewStyle } from "react-native";
 
 /** O react-native-maps não funciona na web; mostra um aviso no lugar. */
-export function MapaView({ style }: { coords?: unknown; style?: StyleProp<ViewStyle> }) {
+export function MapaView({ style }: { coordenadas?: unknown; style?: StyleProp<ViewStyle> }) {
   return (
     <View style={[style, { alignItems: "center", justifyContent: "center" }]}>
       <Text style={{ color: cores.cinzaEscuro }}>

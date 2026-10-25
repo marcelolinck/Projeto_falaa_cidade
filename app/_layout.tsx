@@ -2,7 +2,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import "react-native-reanimated";
 
 import { AuthProvider } from "@/context/auth-context";
-import { CityProvider } from "@/context/city-context";
+import { CidadeProvider } from "@/context/cidade-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export const unstable_settings = {
@@ -16,7 +16,7 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       {/* NOVO — envolve tudo */}
-      <CityProvider>
+      <CidadeProvider>
         <ThemeProvider
           value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
         >
@@ -34,7 +34,7 @@ export default function RootLayout() {
             />
           </Stack>
         </ThemeProvider>
-      </CityProvider>
+      </CidadeProvider>
     </AuthProvider>
   );
 }

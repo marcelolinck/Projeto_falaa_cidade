@@ -1,4 +1,4 @@
-import { Coordenadas } from "@/context/city-context";
+import { Coordenadas } from "@/context/cidade-context";
 import { StyleProp, ViewStyle } from "react-native";
 import MapView from "react-native-maps";
 
@@ -10,17 +10,17 @@ const BRASIL = {
   longitudeDelta: 30,
 };
 
-type Props = { coords: Coordenadas | null; style?: StyleProp<ViewStyle> };
+type Props = { coordenadas: Coordenadas | null; style?: StyleProp<ViewStyle> };
 
 /** Mapa nativo (Android/iOS). Na web existe o arquivo mapa-view.web.tsx. */
-export function MapaView({ coords, style }: Props) {
+export function MapaView({ coordenadas, style }: Props) {
   return (
     <MapView
       style={style}
       showsUserLocation
       showsMyLocationButton
       initialRegion={
-        coords ? { ...coords, latitudeDelta: 0.02, longitudeDelta: 0.02 } : BRASIL
+        coordenadas ? { ...coordenadas, latitudeDelta: 0.02, longitudeDelta: 0.02 } : BRASIL
       }
     />
   );

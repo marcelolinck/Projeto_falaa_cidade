@@ -10,44 +10,44 @@ import {
 
 export type Coordenadas = { latitude: number; longitude: number };
 
-// loading = buscando | ready = achou | denied = usuário negou a permissão | error = falhou
-export type StatusCidade = "loading" | "ready" | "denied" | "error";
+// carregando = buscando | pronto = achou | negado = usuário negou a permissão | erro = falhou
+export type StatusCidade = "carregando" | "pronto" | "negado" | "erro";
 
-type CityContextType = {
+type CidadeContextType = {
   cidade: string | null; // ex.: "Cuiabá"
   uf: string | null; // ex.: "MT"
-  coords: Coordenadas | null; // posição do usuário
+  coordenadas: Coordenadas | null; // posição do usuário
   status: StatusCidade;
   atualizar: () => Promise<void>; // pede a localização de novo
 };
 
-export const CityContext = createContext<CityContextType>({
+export const CidadeContext = createContext<CidadeContextType>({
   cidade: null,
   uf: null,
-  coords: null,
-  status: "loading",
+  coordenadas: null,
+  status: "carregando",
   atualizar: async () => {},
 });
 
 /**
  * Descobre onde o usuário está (GPS -> cidade/UF) e disponibiliza para o app
  * inteiro, igual o AuthProvider faz com o usuário logado.
- * Uso: const { cidade, uf, coords } = useCity();
+ * Uso: const { cidade, uf, coordenadas } = useCidade();
  */
-export function CityProvider({ children }: { children: ReactNode }) {
+export function CidadeProvider({ children }: { children: ReactNode }) {
   const [cidade, setCidade] = useState<string | null>(null);
   const [uf, setUf] = useState<string | null>(null);
-  const [coords, setCoords] = useState<Coordenadas | null>(null);
-  const [status, setStatus] = useState<StatusCidade>("loading");
+  const [coordenadas, setCoordenadas] = useState<Coordenadas | null>(null);
+  const [status, setStatus] = useState<StatusCidade>("carregando");
 
   const atualizar = useCallback(async () => {
     try {
-      setStatus("loading");
+      setStatus("carregando");
 
       const { status: permissao } =
         await Location.requestForegroundPermissionsAsync();
       if (permissao !== "granted") {
-        setStatus("denied");
+        setStatus("negado");
         return;
       }
 
@@ -58,7 +58,7 @@ export function CityProvider({ children }: { children: ReactNode }) {
         latitude: pos.coords.latitude,
         longitude: pos.coords.longitude,
       };
-      setCoords(aqui);
+      setCoordenadas(aqui);
 
       // Geocodificação reversa: coordenadas -> endereço. Se falhar, o mapa
       // ainda abre no lugar certo, só o título fica sem o nome da cidade.
@@ -71,9 +71,9 @@ export function CityProvider({ children }: { children: ReactNode }) {
         setUf(null);
       }
 
-      setStatus("ready");
+      setStatus("pronto");
     } catch {
-      setStatus("error");
+      setStatus("erro");
     }
   }, []);
 
@@ -82,8 +82,8 @@ export function CityProvider({ children }: { children: ReactNode }) {
   }, [atualizar]);
 
   return (
-    <CityContext.Provider value={{ cidade, uf, coords, status, atualizar }}>
+    <CidadeContext.Provider value={{ cidade, uf, coordenadas, status, atualizar }}>
       {children}
-    </CityContext.Provider>
+    </CidadeContext.Provider>
   );
 }
