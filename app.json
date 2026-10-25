@@ -41,6 +41,12 @@
       "expo-image",
       "expo-web-browser",
       "expo-status-bar",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "O app usa sua localização para mostrar os buracos da sua cidade."
+        }
+      ],
       "@react-native-vector-icons/material-icons"
     ],
     "experiments": {
