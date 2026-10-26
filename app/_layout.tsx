@@ -6,8 +6,7 @@ import { CidadeProvider } from "@/context/cidade-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export const unstable_settings = {
-  //anchor: "(tabs)",
-  initialRouteName: "login",
+  anchor: "index", // tela de login (app/index.tsx)
 };
 
 export default function RootLayout() {
@@ -27,6 +26,11 @@ export default function RootLayout() {
             <Stack.Screen
               name="esqueci-senha"
               options={{ title: "Recuperar senha" }}
+            />
+            {/* Só a seta de voltar: o título "Novo reporte" fica no corpo da tela */}
+            <Stack.Screen
+              name="novo-reporte"
+              options={{ title: "", headerBackTitle: "", headerShadowVisible: false }}
             />
             <Stack.Screen
               name="verificar-email"

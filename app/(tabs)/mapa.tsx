@@ -1,14 +1,32 @@
 import { MapaView } from "@/components/mapa-view";
 import { useAuth } from "@/hooks/use-auth";
+import { BuscaFiltros, Filtro } from "@/components/busca-filtros";
+import { STATUS } from "@/constants/status";
 import { useCidade } from "@/hooks/use-cidade";
+import { useOcorrencias } from "@/hooks/use-ocorrencias";
 import { cores } from "@/styles";
 import { Feather } from "@react-native-vector-icons/feather";
+import { useRouter } from "expo-router";
+import { useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Mapa() {
+  const router = useRouter();
   const { user } = useAuth(); // usuário logado (Firebase)
   const { cidade, uf, coordenadas, status, atualizar } = useCidade();
+  const { ocorrencias } = useOcorrencias(coordenadas);
+  const [busca, setBusca] = useState("");
+  const [filtro, setFiltro] = useState<Filtro>("todos");
+
+  // Aplica o filtro de status e a busca por texto (título/descrição, sem acento ou maiúscula)
+  const normalizar = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const termo = normalizar(busca.trim());
+  const visiveis = ocorrencias.filter(
+    (o) =>
+      (filtro === "todos" || o.status === filtro) &&
+      normalizar(`${o.titulo} ${o.descricao ?? ""}`).includes(termo),
+  );
 
   // Iniciais do nome para o avatar ("Marcelo Linck" -> "ML"). Sem login: ícone.
   const iniciais = user?.displayName
@@ -39,13 +57,50 @@ export default function Mapa() {
         </View>
       </View>
 
+      <BuscaFiltros busca={busca} aoMudarBusca={setBusca} filtro={filtro} aoMudarFiltro={setFiltro} />
+
       <View style={styles.mapaBox}>
         {status === "carregando" ? (
           <ActivityIndicator size="large" color={cores.verde} />
         ) : (
           // `key` recria o mapa quando a posição chega, para ele abrir centralizado
-          <MapaView key={coordenadas ? "com-gps" : "sem-gps"} coordenadas={coordenadas} style={styles.mapa} />
+          <MapaView
+            key={coordenadas ? "com-gps" : "sem-gps"}
+            coordenadas={coordenadas}
+            ocorrencias={visiveis}
+            style={styles.mapa}
+          />
         )}
+
+        {ocorrencias.length > 0 && visiveis.length === 0 && (
+          <View style={styles.vazio}>
+            <Text style={styles.avisoTexto}>Nenhuma ocorrência encontrada.</Text>
+          </View>
+        )}
+
+        {ocorrencias.length > 0 && (
+          <View style={styles.legenda}>
+            {Object.values(STATUS).map(({ rotulo, cor }) => (
+              <View key={rotulo} style={styles.legendaItem}>
+                <View style={[styles.legendaPonto, { backgroundColor: cor }]} />
+                <Text style={styles.legendaTexto}>{rotulo}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Botão "+" (novo reporte). Sobe um pouco quando o aviso de localização está na tela */}
+        <Pressable
+          onPress={() => router.push("/novo-reporte")}
+          accessibilityLabel="Novo reporte"
+          style={({ pressed }) => [
+            styles.botaoNovo,
+            { bottom: semLocalizacao ? 112 : 12 },
+            pressed && { backgroundColor: cores.verdeEscuro },
+          ]}
+        >
+          <Feather name="plus" size={28} color={cores.branco} />
+        </Pressable>
 
         {semLocalizacao && (
           <View style={styles.aviso}>
@@ -109,6 +164,41 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: cores.branco,
   },
+  botaoNovo: {
+    position: "absolute",
+    right: 12,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: cores.verde,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  vazio: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: cores.branco,
+  },
+  legenda: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    padding: 10,
+    gap: 6,
+    borderRadius: 12,
+    backgroundColor: cores.branco,
+  },
+  legendaItem: { flexDirection: "row", alignItems: "center", gap: 8 },
+  legendaPonto: { width: 10, height: 10, borderRadius: 5 },
+  legendaTexto: { fontSize: 12, color: cores.preto },
   avisoTexto: { color: cores.preto },
   avisoLink: { color: cores.verde, fontWeight: "700" },
 });
