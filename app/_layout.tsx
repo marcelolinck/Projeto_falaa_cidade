@@ -28,6 +28,11 @@ export default function RootLayout() {
             name="verificar-email"
             options={{ headerShown: false }}
           />
+        {/* Nova tela de reporte */}
+          <Stack.Screen
+              name="novo-reporte"
+              options={{ title: "", headerBackTitle: "", headerShadowVisible: false }}
+            />
         </Stack>
       </ThemeProvider>
     </AuthProvider>
