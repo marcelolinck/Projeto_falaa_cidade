@@ -5,8 +5,8 @@ import { AuthProvider } from "@/context/auth-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export const unstable_settings = {
-  //anchor: "(tabs)",
-  initialRouteName: "login",
+  anchor: "index",
+  //initialRouteName: "login",
 };
 
 export default function RootLayout() {
