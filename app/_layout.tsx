@@ -2,6 +2,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import "react-native-reanimated";
 
 import { AuthProvider } from "@/context/auth-context";
+import { CidadeProvider } from "@/context/cidade-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export const unstable_settings = {
@@ -14,7 +15,7 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      {/* NOVO — envolve tudo */}
+      <CidadeProvider>
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
         <Stack>
           <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -28,13 +29,14 @@ export default function RootLayout() {
             name="verificar-email"
             options={{ headerShown: false }}
           />
-        {/* Nova tela de reporte */}
+          {/* Nova tela de reporte */}
           <Stack.Screen
-              name="novo-reporte"
-              options={{ title: "", headerBackTitle: "", headerShadowVisible: false }}
-            />
+            name="novo-reporte"
+            options={{ title: "", headerBackTitle: "", headerShadowVisible: false }}
+          />
         </Stack>
       </ThemeProvider>
+      </CidadeProvider>
     </AuthProvider>
   );
 }
