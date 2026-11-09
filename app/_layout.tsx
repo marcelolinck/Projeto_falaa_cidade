@@ -32,7 +32,7 @@ export default function RootLayout() {
           {/* Nova tela de reporte */}
           <Stack.Screen
             name="novo-reporte"
-            options={{ title: "", headerBackTitle: "", headerShadowVisible: false }}
+            options={{ headerShown: false }}
           />
         </Stack>
       </ThemeProvider>

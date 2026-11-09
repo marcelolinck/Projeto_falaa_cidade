@@ -29,7 +29,7 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "imageWidth": 280,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
           "dark": {
@@ -45,6 +45,12 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "O app usa sua localização para mostrar os buracos da sua cidade."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "O app usa a câmera para fotografar o problema da sua cidade."
         }
       ],
       "@react-native-vector-icons/material-icons"
