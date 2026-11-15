@@ -1,3 +1,4 @@
+import { File } from "expo-file-system";
 import { ImageManipulator, ImageRef, SaveFormat } from "expo-image-manipulator";
 
 // Limite de tamanho de cada foto depois de comprimida: 1 MB.
@@ -17,11 +18,9 @@ export type FotoComprimida = {
   tamanhoBytes: number;
 };
 
-/** Descobre o tamanho (em bytes) de um arquivo local, lendo-o como blob. */
-async function descobrirTamanhoEmBytes(uri: string): Promise<number> {
-  const resposta = await fetch(uri);
-  const conteudo = await resposta.blob();
-  return conteudo.size;
+/** Descobre o tamanho (em bytes) de um arquivo local, direto do disco do celular. */
+function descobrirTamanhoEmBytes(uri: string): number {
+  return new File(uri).size;
 }
 
 /**
@@ -46,7 +45,7 @@ async function redimensionarFoto(uri: string, ladoMaximo: number): Promise<Image
 /** Salva a imagem como JPEG na qualidade indicada e mede o arquivo gerado. */
 async function salvarComoJpeg(imagem: ImageRef, qualidade: number): Promise<FotoComprimida> {
   const arquivo = await imagem.saveAsync({ compress: qualidade, format: SaveFormat.JPEG });
-  const tamanhoBytes = await descobrirTamanhoEmBytes(arquivo.uri);
+  const tamanhoBytes = descobrirTamanhoEmBytes(arquivo.uri);
 
   return {
     uri: arquivo.uri,

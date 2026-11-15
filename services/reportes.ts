@@ -3,6 +3,7 @@ import { armazenamento, bancoDeDados } from "@/firebase-config";
 import { garantirCadastroDoNotificante } from "@/services/usuarios";
 import { Severidade, TipoOcorrencia } from "@/types/ocorrencia";
 import { gerarGeohash } from "@/utils/geohash";
+import { File } from "expo-file-system";
 import { User } from "firebase/auth";
 import {
   addDoc,
@@ -13,7 +14,7 @@ import {
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
-import { FirebaseStorage, getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { FirebaseStorage, getDownloadURL, getMetadata, ref, uploadBytes } from "firebase/storage";
 
 /*
  * Grava um reporte no Firebase seguindo o modelo de dados do projeto
@@ -80,18 +81,32 @@ async function criarOcorrencia(dados: DadosDoReporte): Promise<DocumentReference
   });
 }
 
-/** Envia uma foto para o armazenamento e devolve o registro que vai no documento. */
+/**
+ * Envia uma foto para o armazenamento e devolve o registro que vai no documento.
+ *
+ * Os bytes são lidos direto do arquivo (File.bytes). Não usamos fetch(uri).blob()
+ * porque no React Native esse Blob nem sempre chega completo ao Firebase, e o
+ * arquivo acabava gravado com apenas alguns bytes.
+ * Depois do envio conferimos o tamanho gravado: se for diferente do original,
+ * a foto é tratada como falha em vez de aparecer como enviada.
+ */
 async function enviarUmaFoto(
   armazenamentoAtivo: FirebaseStorage,
   uriDaFoto: string,
   caminhoNoArmazenamento: string,
   idNotificante: string
 ): Promise<FotoGravada> {
-  const resposta = await fetch(uriDaFoto);
-  const conteudoDaFoto = await resposta.blob();
+  const bytesDaFoto = await new File(uriDaFoto).bytes();
 
   const referenciaDaFoto = ref(armazenamentoAtivo, caminhoNoArmazenamento);
-  await uploadBytes(referenciaDaFoto, conteudoDaFoto, { contentType: "image/jpeg" });
+  await uploadBytes(referenciaDaFoto, bytesDaFoto, { contentType: "image/jpeg" });
+
+  const dadosDoArquivoGravado = await getMetadata(referenciaDaFoto);
+  if (dadosDoArquivoGravado.size !== bytesDaFoto.length) {
+    throw new Error(
+      `A foto foi gravada com ${dadosDoArquivoGravado.size} bytes, mas tinha ${bytesDaFoto.length}.`
+    );
+  }
 
   return {
     url: await getDownloadURL(referenciaDaFoto),
