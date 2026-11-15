@@ -1,142 +1,204 @@
 import { Coordenadas } from "@/context/cidade-context";
-import { db, storage } from "@/firebase-config";
-import { garantirUsuario } from "@/services/usuarios";
+import { armazenamento, bancoDeDados } from "@/firebase-config";
+import { garantirCadastroDoNotificante } from "@/services/usuarios";
 import { Severidade, TipoOcorrencia } from "@/types/ocorrencia";
 import { gerarGeohash } from "@/utils/geohash";
 import { User } from "firebase/auth";
 import {
   addDoc,
   collection,
+  DocumentReference,
   GeoPoint,
   serverTimestamp,
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { FirebaseStorage, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
 /*
  * Grava um reporte no Firebase seguindo o modelo de dados do projeto
- * (claude/modelo-dados-firebase.md). Os NOMES DOS CAMPOS dentro do documento
- * ficam em inglês (reporterId, cityId, createdAt...) porque as Security Rules e
- * as Cloud Functions usam esses nomes; as variáveis do código ficam em português.
+ * (claude/modelo-dados-firebase.md). Coleções, campos e valores gravados estão
+ * todos em português, assim como o código.
  */
 
-export type DadosReporte = {
-  usuario: User;
+export type DadosDoReporte = {
+  usuarioLogado: User;
   tipo: TipoOcorrencia;
   descricao: string;
   severidade: Severidade;
   coordenadas: Coordenadas;
   endereco: string | null;
-  codigoIbge: string; // código IBGE da cidade (7 dígitos), vira o cityId
-  fotos: string[]; // fotos do problema (já comprimidas), até 5
-  fotosReferencia: string[]; // fotos de referência (já comprimidas), até 2
+  codigoIbge: string; // código IBGE da cidade, vira o `idCidade` da ocorrência
+  fotosDoProblema: string[]; // fotos já comprimidas, até 5
+  fotosDeReferencia: string[]; // fotos já comprimidas, até 2
 };
 
-export type ResultadoReporte = {
-  id: string;
-  storageAtivo: boolean; // false = bucket não configurado, fotos não enviadas
-  fotosEnviadas: number;
-  fotosComFalha: number;
+export type ResultadoDoReporte = {
+  idOcorrencia: string;
+  armazenamentoAtivo: boolean; // false = bucket não configurado, fotos não enviadas
+  quantidadeDeFotosEnviadas: number;
+  quantidadeDeFotosComFalha: number;
 };
 
+// Como cada foto é registrada dentro do documento da ocorrência.
 type FotoGravada = {
   url: string;
-  storagePath: string;
-  uploadedBy: string;
-  uploadedAt: Timestamp;
+  caminhoNoArmazenamento: string;
+  enviadaPor: string; // uid de quem enviou
+  enviadaEm: Timestamp;
 };
 
-/** Sobe uma foto para o Storage e devolve o registro que vai no documento. */
-async function enviarFoto(uri: string, caminho: string, uid: string): Promise<FotoGravada> {
-  const arquivo = await (await fetch(uri)).blob();
-  const referencia = ref(storage!, caminho);
-  await uploadBytes(referencia, arquivo, { contentType: "image/jpeg" });
+type FotosEnviadas = {
+  fotosGravadas: FotoGravada[];
+  quantidadeDeFalhas: number;
+};
+
+/** Passo 1: cria o documento da ocorrência, com as listas de fotos ainda vazias. */
+async function criarOcorrencia(dados: DadosDoReporte): Promise<DocumentReference> {
+  const { latitude, longitude } = dados.coordenadas;
+
+  return addDoc(collection(bancoDeDados, "ocorrencias"), {
+    idNotificante: dados.usuarioLogado.uid,
+    idCidade: dados.codigoIbge,
+    idDepartamento: null,
+    tipo: dados.tipo,
+    localizacao: new GeoPoint(latitude, longitude),
+    geohash: gerarGeohash(latitude, longitude),
+    endereco: dados.endereco,
+    descricao: dados.descricao.trim() || null,
+    severidade: dados.severidade,
+    situacao: "aberta",
+    fotos: { problema: [], referencia: [], resolvida: [] },
+    quantidadeApoios: 0,
+    criadoEm: serverTimestamp(),
+    reconhecidoEm: null,
+    resolvidoEm: null,
+    confirmadoEm: null,
+    tempoResolucaoSegundos: null,
+    quantidadeReaberturas: 0,
+    atualizadoEm: serverTimestamp(),
+  });
+}
+
+/** Envia uma foto para o armazenamento e devolve o registro que vai no documento. */
+async function enviarUmaFoto(
+  armazenamentoAtivo: FirebaseStorage,
+  uriDaFoto: string,
+  caminhoNoArmazenamento: string,
+  idNotificante: string
+): Promise<FotoGravada> {
+  const resposta = await fetch(uriDaFoto);
+  const conteudoDaFoto = await resposta.blob();
+
+  const referenciaDaFoto = ref(armazenamentoAtivo, caminhoNoArmazenamento);
+  await uploadBytes(referenciaDaFoto, conteudoDaFoto, { contentType: "image/jpeg" });
+
   return {
-    url: await getDownloadURL(referencia),
-    storagePath: caminho,
-    uploadedBy: uid,
+    url: await getDownloadURL(referenciaDaFoto),
+    caminhoNoArmazenamento,
+    enviadaPor: idNotificante,
     // Timestamp.now() e não serverTimestamp(): o Firestore não aceita
     // serverTimestamp() dentro de listas.
-    uploadedAt: Timestamp.now(),
+    enviadaEm: Timestamp.now(),
   };
 }
 
-/** Sobe várias fotos de uma pasta (ex.: pothole/1.jpg, 2.jpg...). Falhas não derrubam as outras. */
-async function enviarFotos(uris: string[], pasta: string, uid: string) {
-  const gravadas: FotoGravada[] = [];
-  let falhas = 0;
-  for (let i = 0; i < uris.length; i++) {
+/**
+ * Envia as fotos de uma pasta (ex.: problema/1.jpg, problema/2.jpg...).
+ * Se uma foto falhar, as outras continuam sendo enviadas.
+ */
+async function enviarGrupoDeFotos(
+  armazenamentoAtivo: FirebaseStorage,
+  urisDasFotos: string[],
+  pasta: string,
+  idNotificante: string
+): Promise<FotosEnviadas> {
+  const fotosGravadas: FotoGravada[] = [];
+  let quantidadeDeFalhas = 0;
+
+  for (let posicao = 0; posicao < urisDasFotos.length; posicao++) {
+    const numeroDaFoto = posicao + 1; // os arquivos são numerados a partir de 1
+    const caminho = `${pasta}/${numeroDaFoto}.jpg`;
+
     try {
-      gravadas.push(await enviarFoto(uris[i], `${pasta}/${i + 1}.jpg`, uid));
+      const foto = await enviarUmaFoto(armazenamentoAtivo, urisDasFotos[posicao], caminho, idNotificante);
+      fotosGravadas.push(foto);
     } catch (erro) {
-      falhas++;
-      console.warn(`Falha ao enviar a foto ${pasta}/${i + 1}.jpg`, erro);
+      quantidadeDeFalhas++;
+      console.warn(`Falha ao enviar a foto ${caminho}`, erro);
     }
   }
-  return { gravadas, falhas };
+
+  return { fotosGravadas, quantidadeDeFalhas };
+}
+
+/** Passo 3: anexa ao documento da ocorrência as URLs das fotos que foram enviadas. */
+async function anexarFotosNaOcorrencia(
+  ocorrencia: DocumentReference,
+  fotosDoProblema: FotoGravada[],
+  fotosDeReferencia: FotoGravada[]
+): Promise<void> {
+  await updateDoc(ocorrencia, {
+    "fotos.problema": fotosDoProblema,
+    "fotos.referencia": fotosDeReferencia,
+    atualizadoEm: serverTimestamp(),
+  });
 }
 
 /**
- * Fluxo em 3 passos (ver nota "ordem de criação" no modelo de dados):
- *  1. cria o documento em `ocorrencias` com as listas de fotos vazias;
- *  2. envia as fotos ao Storage (a regra do Storage só deixa porque o
- *     documento do passo 1 já existe);
- *  3. anexa as URLs ao mesmo documento.
+ * Grava o reporte completo. O fluxo tem 3 passos porque a regra do Storage
+ * precisa que o documento da ocorrência já exista antes de aceitar a foto:
+ *   1. cria a ocorrência no Firestore (com as listas de fotos vazias);
+ *   2. envia as fotos para o Storage;
+ *   3. anexa as URLs das fotos na ocorrência.
  */
-export async function enviarReporte(dados: DadosReporte): Promise<ResultadoReporte> {
-  const { usuario, coordenadas } = dados;
+export async function enviarReporte(dados: DadosDoReporte): Promise<ResultadoDoReporte> {
+  const idNotificante = dados.usuarioLogado.uid;
 
-  // Cadastro do notificante: garante usuarios/{uid} antes do primeiro reporte.
-  await garantirUsuario(usuario);
+  await garantirCadastroDoNotificante(dados.usuarioLogado);
 
-  // Passo 1: documento da ocorrência.
-  const documento = await addDoc(collection(db, "ocorrencias"), {
-    reporterId: usuario.uid,
-    cityId: dados.codigoIbge,
-    departmentId: null,
-    type: dados.tipo,
-    location: new GeoPoint(coordenadas.latitude, coordenadas.longitude),
-    geohash: gerarGeohash(coordenadas.latitude, coordenadas.longitude),
-    address: dados.endereco,
-    description: dados.descricao.trim() || null,
-    severity: dados.severidade,
-    status: "aberta",
-    photos: { pothole: [], reference: [], resolved: [] },
-    supportCount: 0,
-    createdAt: serverTimestamp(),
-    recognizedAt: null,
-    resolvedAt: null,
-    confirmedAt: null,
-    resolutionTimeSeconds: null,
-    reopenedCount: 0,
-    updatedAt: serverTimestamp(),
-  });
+  const ocorrencia = await criarOcorrencia(dados);
 
   // Sem bucket configurado: a ocorrência já foi gravada, só não há fotos.
-  if (!storage) {
-    return { id: documento.id, storageAtivo: false, fotosEnviadas: 0, fotosComFalha: 0 };
+  if (!armazenamento) {
+    return {
+      idOcorrencia: ocorrencia.id,
+      armazenamentoAtivo: false,
+      quantidadeDeFotosEnviadas: 0,
+      quantidadeDeFotosComFalha: 0,
+    };
   }
 
-  // Passo 2: fotos no Storage.
-  const pasta = `ocorrencias/${documento.id}`;
-  const problema = await enviarFotos(dados.fotos, `${pasta}/pothole`, usuario.uid);
-  const referencia = await enviarFotos(dados.fotosReferencia, `${pasta}/reference`, usuario.uid);
+  const pastaDaOcorrencia = `ocorrencias/${ocorrencia.id}`;
+  const fotosDoProblema = await enviarGrupoDeFotos(
+    armazenamento,
+    dados.fotosDoProblema,
+    `${pastaDaOcorrencia}/problema`,
+    idNotificante
+  );
+  const fotosDeReferencia = await enviarGrupoDeFotos(
+    armazenamento,
+    dados.fotosDeReferencia,
+    `${pastaDaOcorrencia}/referencia`,
+    idNotificante
+  );
 
-  // Passo 3: anexa as URLs no documento.
-  const enviadas = problema.gravadas.length + referencia.gravadas.length;
-  if (enviadas > 0) {
-    await updateDoc(documento, {
-      "photos.pothole": problema.gravadas,
-      "photos.reference": referencia.gravadas,
-      updatedAt: serverTimestamp(),
-    });
+  const quantidadeDeFotosEnviadas =
+    fotosDoProblema.fotosGravadas.length + fotosDeReferencia.fotosGravadas.length;
+
+  if (quantidadeDeFotosEnviadas > 0) {
+    await anexarFotosNaOcorrencia(
+      ocorrencia,
+      fotosDoProblema.fotosGravadas,
+      fotosDeReferencia.fotosGravadas
+    );
   }
 
   return {
-    id: documento.id,
-    storageAtivo: true,
-    fotosEnviadas: enviadas,
-    fotosComFalha: problema.falhas + referencia.falhas,
+    idOcorrencia: ocorrencia.id,
+    armazenamentoAtivo: true,
+    quantidadeDeFotosEnviadas,
+    quantidadeDeFotosComFalha:
+      fotosDoProblema.quantidadeDeFalhas + fotosDeReferencia.quantidadeDeFalhas,
   };
 }

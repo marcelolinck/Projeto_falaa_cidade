@@ -14,7 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function Mapa() {
   const router = useRouter();
   const { user } = useAuth(); // usuário logado (Firebase)
-  const { cidade, uf, coordenadas, status, atualizar } = useCidade();
+  const { cidade, uf, coordenadas, situacao, atualizar } = useCidade();
   const { ocorrencias } = useOcorrencias(coordenadas);
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState<Filtro>("todos");
@@ -38,11 +38,11 @@ export default function Mapa() {
 
   const titulo = cidade
     ? `${cidade}${uf ? `, ${uf}` : ""}`
-    : status === "carregando"
+    : situacao === "carregando"
       ? "Localizando..."
       : "Sua cidade";
 
-  const semLocalizacao = status === "negado" || status === "erro";
+  const semLocalizacao = situacao === "negado" || situacao === "erro";
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -60,7 +60,7 @@ export default function Mapa() {
       <BuscaFiltros busca={busca} aoMudarBusca={setBusca} filtro={filtro} aoMudarFiltro={setFiltro} />
 
       <View style={styles.mapaBox}>
-        {status === "carregando" ? (
+        {situacao === "carregando" ? (
           <ActivityIndicator size="large" color={cores.verde} />
         ) : (
           // `key` recria o mapa quando a posição chega, para ele abrir centralizado
@@ -105,13 +105,13 @@ export default function Mapa() {
         {semLocalizacao && (
           <View style={styles.aviso}>
             <Text style={styles.avisoTexto}>
-              {status === "negado"
+              {situacao === "negado"
                 ? "Permita a localização para ver os buracos perto de você."
                 : "Não foi possível obter sua localização."}
             </Text>
-            <Pressable onPress={status === "negado" ? Linking.openSettings : atualizar}>
+            <Pressable onPress={situacao === "negado" ? Linking.openSettings : atualizar}>
               <Text style={styles.avisoLink}>
-                {status === "negado" ? "Abrir ajustes" : "Tentar de novo"}
+                {situacao === "negado" ? "Abrir ajustes" : "Tentar de novo"}
               </Text>
             </Pressable>
           </View>

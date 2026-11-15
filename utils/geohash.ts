@@ -1,35 +1,67 @@
-const BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz";
+// Letras usadas pelo geohash. Cada letra representa 5 bits.
+const ALFABETO_GEOHASH = "0123456789bcdefghjkmnpqrstuvwxyz";
+const BITS_POR_LETRA = 5;
+
+type Intervalo = { minimo: number; maximo: number };
+
+type MetadeEscolhida = {
+  bit: 0 | 1; // 1 = o valor está na metade de cima; 0 = na metade de baixo
+  intervaloReduzido: Intervalo; // a metade onde o valor está
+};
+
+/** Divide o intervalo ao meio e diz em qual das duas metades o valor está. */
+function escolherMetade(valor: number, intervalo: Intervalo): MetadeEscolhida {
+  const meio = (intervalo.minimo + intervalo.maximo) / 2;
+
+  if (valor >= meio) {
+    return { bit: 1, intervaloReduzido: { minimo: meio, maximo: intervalo.maximo } };
+  }
+  return { bit: 0, intervaloReduzido: { minimo: intervalo.minimo, maximo: meio } };
+}
 
 /**
- * Converte latitude/longitude em um geohash (texto que representa uma área).
+ * Converte latitude/longitude em um geohash: um texto que representa uma área.
  * Pontos próximos têm geohashes que começam igual, o que permite buscar
  * ocorrências por proximidade no Firestore (RF09).
- * Precisão 9 ≈ 5 metros.
+ * Com 9 letras a área tem cerca de 5 metros.
+ *
+ * Como funciona: o mapa é dividido ao meio várias vezes, alternando entre
+ * longitude e latitude. Cada divisão gera 1 bit (qual metade?), e a cada 5 bits
+ * escolhemos uma letra do alfabeto.
  */
-export function gerarGeohash(latitude: number, longitude: number, precisao = 9): string {
-  let latMin = -90, latMax = 90, lngMin = -180, lngMax = 180;
-  let hash = "";
-  let bit = 0;
-  let indice = 0;
-  let usaLongitude = true;
+export function gerarGeohash(
+  latitude: number,
+  longitude: number,
+  quantidadeDeLetras = 9
+): string {
+  let intervaloLatitude: Intervalo = { minimo: -90, maximo: 90 };
+  let intervaloLongitude: Intervalo = { minimo: -180, maximo: 180 };
 
-  while (hash.length < precisao) {
-    if (usaLongitude) {
-      const meio = (lngMin + lngMax) / 2;
-      if (longitude >= meio) { indice = indice * 2 + 1; lngMin = meio; }
-      else { indice = indice * 2; lngMax = meio; }
+  let geohash = "";
+  let bitsDaLetraAtual = 0;
+  let numeroDaLetraAtual = 0;
+  let proximoBitEhDaLongitude = true; // o geohash começa pela longitude
+
+  while (geohash.length < quantidadeDeLetras) {
+    if (proximoBitEhDaLongitude) {
+      const metade = escolherMetade(longitude, intervaloLongitude);
+      intervaloLongitude = metade.intervaloReduzido;
+      numeroDaLetraAtual = numeroDaLetraAtual * 2 + metade.bit;
     } else {
-      const meio = (latMin + latMax) / 2;
-      if (latitude >= meio) { indice = indice * 2 + 1; latMin = meio; }
-      else { indice = indice * 2; latMax = meio; }
+      const metade = escolherMetade(latitude, intervaloLatitude);
+      intervaloLatitude = metade.intervaloReduzido;
+      numeroDaLetraAtual = numeroDaLetraAtual * 2 + metade.bit;
     }
-    usaLongitude = !usaLongitude;
 
-    if (++bit === 5) {
-      hash += BASE32[indice];
-      bit = 0;
-      indice = 0;
+    proximoBitEhDaLongitude = !proximoBitEhDaLongitude;
+    bitsDaLetraAtual++;
+
+    if (bitsDaLetraAtual === BITS_POR_LETRA) {
+      geohash += ALFABETO_GEOHASH[numeroDaLetraAtual];
+      bitsDaLetraAtual = 0;
+      numeroDaLetraAtual = 0;
     }
   }
-  return hash;
+
+  return geohash;
 }

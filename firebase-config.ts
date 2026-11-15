@@ -28,19 +28,22 @@ export const auth =
 
 
 // Firestore: banco de dados (ocorrências, usuários...).
+// `initializeFirestore` só pode ser chamado uma vez por app. No recarregamento
+// rápido do Expo (Fast Refresh) este arquivo roda de novo; nesse caso o
+// Firestore já existe e basta pegá-lo com `getFirestore`.
 // `experimentalAutoDetectLongPolling` evita travamentos de conexão em redes
-// de celular/Wi-Fi que bloqueiam o canal padrão do Firestore.
-// O try/catch existe porque `initializeFirestore` só pode rodar uma vez; no
-// recarregamento rápido (Fast Refresh) usamos a instância que já existe.
-export const db = (() => {
+// que bloqueiam o canal padrão do Firestore.
+function iniciarBancoDeDados() {
   try {
     return initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
   } catch {
     return getFirestore(app);
   }
-})();
+}
 
-// Storage: arquivos (fotos). Só existe se EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET
-// estiver preenchida no .env. Sem ela fica `null` e o app grava a ocorrência
-// normalmente, apenas sem enviar as fotos.
-export const storage = firebaseConfig.storageBucket ? getStorage(app) : null;
+export const bancoDeDados = iniciarBancoDeDados();
+
+// Storage: armazenamento das fotos. Só existe se a variável
+// EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET estiver preenchida no .env.
+// Sem ela vale `null`: o app grava a ocorrência normalmente, só sem as fotos.
+export const armazenamento = firebaseConfig.storageBucket ? getStorage(app) : null;

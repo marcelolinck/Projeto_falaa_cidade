@@ -1,87 +1,102 @@
 import { siglaDoEstado } from "@/constants/estados";
 import { buscarCodigoIbge } from "@/utils/municipios";
 import * as Location from "expo-location";
-import {
-  createContext,
-  ReactNode,
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import { createContext, ReactNode, useCallback, useEffect, useState } from "react";
 
 export type Coordenadas = { latitude: number; longitude: number };
 
 // carregando = buscando | pronto = achou | negado = usuário negou a permissão | erro = falhou
-export type StatusCidade = "carregando" | "pronto" | "negado" | "erro";
+export type SituacaoCidade = "carregando" | "pronto" | "negado" | "erro";
 
-type CidadeContextType = {
-  cidade: string | null; // ex.: "Cuiabá"
+type ContextoCidade = {
+  cidade: string | null; // ex.: "Sinop"
   uf: string | null; // ex.: "MT"
-  codigoIbge: string | null; // ex.: "5107909" (Sinop), identifica a cidade no banco
+  codigoIbge: string | null; // ex.: "5107909", identifica a cidade no banco de dados
   coordenadas: Coordenadas | null; // posição do usuário
-  status: StatusCidade;
+  situacao: SituacaoCidade;
   atualizar: () => Promise<void>; // pede a localização de novo
 };
 
-export const CidadeContext = createContext<CidadeContextType>({
+export const CidadeContext = createContext<ContextoCidade>({
   cidade: null,
   uf: null,
   codigoIbge: null,
   coordenadas: null,
-  status: "carregando",
+  situacao: "carregando",
   atualizar: async () => {},
 });
 
+type DadosDaCidade = {
+  cidade: string | null;
+  uf: string | null;
+  codigoIbge: string | null;
+};
+
+const CIDADE_NAO_IDENTIFICADA: DadosDaCidade = { cidade: null, uf: null, codigoIbge: null };
+
+/** Pergunta ao usuário se o app pode usar a localização enquanto está aberto. */
+async function usuarioPermitiuLocalizacao(): Promise<boolean> {
+  const resposta = await Location.requestForegroundPermissionsAsync();
+  return resposta.granted;
+}
+
+/** Lê a posição atual do GPS. */
+async function lerCoordenadasAtuais(): Promise<Coordenadas> {
+  const posicao = await Location.getCurrentPositionAsync({
+    accuracy: Location.Accuracy.Balanced,
+  });
+  return {
+    latitude: posicao.coords.latitude,
+    longitude: posicao.coords.longitude,
+  };
+}
+
 /**
- * Descobre onde o usuário está (GPS -> cidade/UF) e disponibiliza para o app
- * inteiro, igual o AuthProvider faz com o usuário logado.
- * Uso: const { cidade, uf, coordenadas } = useCidade();
+ * Descobre cidade, UF e código IBGE a partir das coordenadas.
+ * Se a geocodificação reversa falhar, o mapa ainda abre no lugar certo; só
+ * ficamos sem o nome da cidade.
+ */
+async function descobrirCidade(coordenadas: Coordenadas): Promise<DadosDaCidade> {
+  try {
+    const [lugar] = await Location.reverseGeocodeAsync(coordenadas);
+    const uf = siglaDoEstado(lugar?.region ?? null);
+
+    return {
+      cidade: lugar?.city ?? lugar?.subregion ?? null,
+      uf,
+      // Cidade do GPS -> código oficial do IBGE (tabela embutida no app).
+      codigoIbge: buscarCodigoIbge([lugar?.city, lugar?.subregion], uf),
+    };
+  } catch {
+    return CIDADE_NAO_IDENTIFICADA;
+  }
+}
+
+/**
+ * Descobre onde o usuário está (GPS -> cidade/UF -> código IBGE) e disponibiliza
+ * para o app inteiro, igual o AuthProvider faz com o usuário logado.
+ * Uso: const { cidade, uf, codigoIbge, coordenadas } = useCidade();
  */
 export function CidadeProvider({ children }: { children: ReactNode }) {
-  const [cidade, setCidade] = useState<string | null>(null);
-  const [uf, setUf] = useState<string | null>(null);
-  const [codigoIbge, setCodigoIbge] = useState<string | null>(null);
+  const [dadosDaCidade, setDadosDaCidade] = useState<DadosDaCidade>(CIDADE_NAO_IDENTIFICADA);
   const [coordenadas, setCoordenadas] = useState<Coordenadas | null>(null);
-  const [status, setStatus] = useState<StatusCidade>("carregando");
+  const [situacao, setSituacao] = useState<SituacaoCidade>("carregando");
 
   const atualizar = useCallback(async () => {
     try {
-      setStatus("carregando");
+      setSituacao("carregando");
 
-      const { status: permissao } =
-        await Location.requestForegroundPermissionsAsync();
-      if (permissao !== "granted") {
-        setStatus("negado");
+      if (!(await usuarioPermitiuLocalizacao())) {
+        setSituacao("negado");
         return;
       }
 
-      const pos = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      const aqui = {
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-      };
-      setCoordenadas(aqui);
-
-      // Geocodificação reversa: coordenadas -> endereço. Se falhar, o mapa
-      // ainda abre no lugar certo, só o título fica sem o nome da cidade.
-      try {
-        const [lugar] = await Location.reverseGeocodeAsync(aqui);
-        const siglaUf = siglaDoEstado(lugar?.region ?? null);
-        setCidade(lugar?.city ?? lugar?.subregion ?? null);
-        setUf(siglaUf);
-        // Cidade do GPS -> código oficial do IBGE (tabela embutida no app).
-        setCodigoIbge(buscarCodigoIbge([lugar?.city, lugar?.subregion], siglaUf));
-      } catch {
-        setCidade(null);
-        setUf(null);
-        setCodigoIbge(null);
-      }
-
-      setStatus("pronto");
+      const coordenadasAtuais = await lerCoordenadasAtuais();
+      setCoordenadas(coordenadasAtuais);
+      setDadosDaCidade(await descobrirCidade(coordenadasAtuais));
+      setSituacao("pronto");
     } catch {
-      setStatus("erro");
+      setSituacao("erro");
     }
   }, []);
 
@@ -90,7 +105,7 @@ export function CidadeProvider({ children }: { children: ReactNode }) {
   }, [atualizar]);
 
   return (
-    <CidadeContext.Provider value={{ cidade, uf, codigoIbge, coordenadas, status, atualizar }}>
+    <CidadeContext.Provider value={{ ...dadosDaCidade, coordenadas, situacao, atualizar }}>
       {children}
     </CidadeContext.Provider>
   );

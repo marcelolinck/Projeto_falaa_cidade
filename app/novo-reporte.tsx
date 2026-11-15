@@ -2,10 +2,10 @@ import { MapaView } from "@/components/mapa-view";
 import { TIPOS } from "@/constants/tipos";
 import { useAuth } from "@/hooks/use-auth";
 import { useCidade } from "@/hooks/use-cidade";
-import { enviarReporte } from "@/services/reportes";
+import { enviarReporte, ResultadoDoReporte } from "@/services/reportes";
 import { cores } from "@/styles";
 import { Severidade, TipoOcorrencia } from "@/types/ocorrencia";
-import { comprimirImagem } from "@/utils/imagem";
+import { comprimirFoto } from "@/utils/imagem";
 import { Feather } from "@react-native-vector-icons/feather";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
@@ -37,24 +37,24 @@ const ETAPA_ATUAL = 2;
 /** Barra de progresso: etapas concluídas (check), atual (verde) e futuras (cinza). */
 function Etapas() {
   return (
-    <View style={styles.etapas}>
+    <View style={estilos.etapas}>
       {Array.from({ length: TOTAL_ETAPAS }, (_, i) => {
         const numero = i + 1;
         const concluida = numero < ETAPA_ATUAL;
         const atual = numero === ETAPA_ATUAL;
         return (
-          <View key={numero} style={styles.etapaItem}>
+          <View key={numero} style={estilos.etapaItem}>
             {i > 0 && (
               <View
                 style={[
-                  styles.etapaLinha,
+                  estilos.etapaLinha,
                   numero <= ETAPA_ATUAL && { backgroundColor: cores.azul },
                 ]}
               />
             )}
             <View
               style={[
-                styles.etapaBola,
+                estilos.etapaBola,
                 concluida && { backgroundColor: cores.azul },
                 atual && { backgroundColor: cores.verde },
               ]}
@@ -62,7 +62,7 @@ function Etapas() {
               {concluida ? (
                 <Feather name="check" size={12} color={cores.branco} />
               ) : (
-                <Text style={[styles.etapaNumero, atual && { color: cores.branco }]}>
+                <Text style={[estilos.etapaNumero, atual && { color: cores.branco }]}>
                   {numero}
                 </Text>
               )}
@@ -73,6 +73,9 @@ function Etapas() {
     </View>
   );
 }
+
+const ENDERECO_BUSCANDO = "Buscando endereço...";
+const ENDERECO_NAO_ENCONTRADO = "Endereço não encontrado";
 
 const MAX_FOTOS = 5;
 const MAX_FOTOS_REFERENCIA = 2;
@@ -113,14 +116,14 @@ function ListaFotos({
         <Pressable
           onPress={onAdicionar}
           style={[
-            styles.foto,
-            tracejado ? styles.fotoTracejada : styles.fotoPreenchida,
+            estilos.foto,
+            tracejado ? estilos.fotoTracejada : estilos.fotoPreenchida,
             { height: uris.length > 0 ? 56 : altura },
           ]}
         >
-          <View style={styles.fotoConteudo}>
+          <View style={estilos.fotoConteudo}>
             <Feather name="camera" size={22} color={cores.cinzaEscuro} />
-            <Text style={styles.fotoTexto}>
+            <Text style={estilos.fotoTexto}>
               {uris.length > 0 ? "Toque para adicionar outra foto" : textoVazio}
             </Text>
           </View>
@@ -129,24 +132,24 @@ function ListaFotos({
 
       {/* Fotos já tiradas, logo abaixo, com a opção de excluir. */}
       {uris.length > 0 && (
-        <View style={styles.adicionadas}>
-          <View style={styles.adicionadasTitulo}>
+        <View style={estilos.adicionadas}>
+          <View style={estilos.adicionadasTitulo}>
             <Feather name="check-circle" size={14} color={cores.verde} />
-            <Text style={styles.adicionadasTexto}>
+            <Text style={estilos.adicionadasTexto}>
               {uris.length === 1
                 ? "1 foto adicionada"
                 : `${uris.length} fotos adicionadas`}
               {cheio ? " (limite atingido)" : ""}
             </Text>
           </View>
-          <View style={styles.miniaturas}>
+          <View style={estilos.miniaturas}>
             {uris.map((uri, i) => (
-              <View key={uri} style={styles.miniatura}>
+              <View key={uri} style={estilos.miniatura}>
                 <Image source={{ uri }} style={StyleSheet.absoluteFill} />
                 <Pressable
                   onPress={() => confirmarRemocao(i)}
                   hitSlop={8}
-                  style={styles.remover}
+                  style={estilos.remover}
                   accessibilityLabel="Excluir foto"
                 >
                   <Feather name="trash-2" size={14} color={cores.branco} />
@@ -160,15 +163,38 @@ function ListaFotos({
   );
 }
 
+/** Texto do aviso exibido depois que o reporte foi gravado. */
+function montarMensagemDeSucesso(resultado: ResultadoDoReporte): string {
+  const agradecimento = "Obrigado por ajudar sua cidade!";
+
+  if (!resultado.armazenamentoAtivo) {
+    return `${agradecimento}\n\nAs fotos ainda não foram enviadas porque o armazenamento não está configurado.`;
+  }
+  if (resultado.quantidadeDeFotosComFalha > 0) {
+    return `${agradecimento}\n\n${resultado.quantidadeDeFotosComFalha} foto(s) não puderam ser enviadas.`;
+  }
+  return agradecimento;
+}
+
+/** Texto do aviso exibido quando a gravação falhou. */
+function montarMensagemDeErro(erro: unknown): string {
+  const codigoDoErro = (erro as { code?: string }).code;
+
+  if (codigoDoErro === "permission-denied") {
+    return "Sem permissão para gravar. Confira se as regras de segurança do Firestore foram publicadas.";
+  }
+  return "Verifique sua conexão e tente novamente.";
+}
+
 export default function NovoReporte() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user: usuarioLogado } = useAuth();
   const { coordenadas, codigoIbge, atualizar } = useCidade();
 
   const [tipo, setTipo] = useState<TipoOcorrencia>("buraco");
-  const [fotos, setFotos] = useState<string[]>([]);
-  const [fotosReferencia, setFotosReferencia] = useState<string[]>([]);
-  const [endereco, setEndereco] = useState("Buscando endereço...");
+  const [fotosDoProblema, setFotosDoProblema] = useState<string[]>([]);
+  const [fotosDeReferencia, setFotosDeReferencia] = useState<string[]>([]);
+  const [endereco, setEndereco] = useState(ENDERECO_BUSCANDO);
   const [severidade, setSeveridade] = useState<Severidade>("moderado");
   const [descricao, setDescricao] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -184,9 +210,9 @@ export default function NovoReporte() {
         const rua = [lugar?.street, lugar?.streetNumber].filter(Boolean).join(", ");
         const bairro = lugar?.district ?? lugar?.subregion;
         const texto = [rua, bairro].filter(Boolean).join(" — ");
-        setEndereco(texto || "Endereço não encontrado");
+        setEndereco(texto || ENDERECO_NAO_ENCONTRADO);
       })
-      .catch(() => ativo && setEndereco("Endereço não encontrado"));
+      .catch(() => ativo && setEndereco(ENDERECO_NAO_ENCONTRADO));
     return () => {
       ativo = false;
     };
@@ -206,7 +232,7 @@ export default function NovoReporte() {
     // no máximo 1 MB antes de aparecer na tela e de ser enviada.
     setProcessandoFoto(true);
     try {
-      const foto = await comprimirImagem(resultado.assets[0].uri);
+      const foto = await comprimirFoto(resultado.assets[0].uri);
       definir((atuais) => [...atuais, foto.uri]);
     } catch (erro) {
       console.warn("Falha ao comprimir a foto", erro);
@@ -217,7 +243,8 @@ export default function NovoReporte() {
   }
 
   async function enviar() {
-    if (fotos.length === 0) {
+    // 1. Confere se o formulário e o usuário estão prontos para o envio.
+    if (fotosDoProblema.length === 0) {
       Alert.alert("Foto obrigatória", "Adicione a foto do problema para continuar.");
       return;
     }
@@ -225,77 +252,71 @@ export default function NovoReporte() {
       Alert.alert("Descrição obrigatória", "Descreva o problema que você encontrou.");
       return;
     }
-    if (!user) {
+    if (!usuarioLogado) {
       Alert.alert("Login necessário", "Entre com a sua conta para reportar um problema.");
       return;
     }
     if (!coordenadas) {
-      Alert.alert("Localização indisponível", "Ative a localização para registrar onde está o problema.");
+      Alert.alert(
+        "Localização indisponível",
+        "Ative a localização para registrar onde está o problema."
+      );
       return;
     }
-
     if (!codigoIbge) {
       Alert.alert(
         "Cidade não identificada",
         "Não conseguimos identificar sua cidade. Confira se a localização está ativa e tente novamente.",
-        [{ text: "Tentar de novo", onPress: atualizar }, { text: "Cancelar", style: "cancel" }]
+        [
+          { text: "Tentar de novo", onPress: atualizar },
+          { text: "Cancelar", style: "cancel" },
+        ]
       );
       return;
     }
 
+    // 2. Grava o reporte no Firebase.
     setEnviando(true);
     try {
-      // O endereço só vai se foi realmente encontrado (não o texto de aviso).
-      const enderecoEncontrado =
-        endereco === "Buscando endereço..." || endereco === "Endereço não encontrado"
-          ? null
-          : endereco;
+      // O endereço só é gravado se foi realmente encontrado (e não o texto de aviso).
+      const enderecoFoiEncontrado =
+        endereco !== ENDERECO_BUSCANDO && endereco !== ENDERECO_NAO_ENCONTRADO;
 
       const resultado = await enviarReporte({
-        usuario: user,
+        usuarioLogado,
         tipo,
         descricao,
         severidade,
         coordenadas,
-        endereco: enderecoEncontrado,
+        endereco: enderecoFoiEncontrado ? endereco : null,
         codigoIbge,
-        fotos,
-        fotosReferencia,
+        fotosDoProblema,
+        fotosDeReferencia,
       });
 
-      let mensagem = "Obrigado por ajudar sua cidade!";
-      if (!resultado.storageAtivo) {
-        mensagem += "\n\nAs fotos ainda não foram enviadas porque o Storage não está configurado.";
-      } else if (resultado.fotosComFalha > 0) {
-        mensagem += `\n\n${resultado.fotosComFalha} foto(s) não puderam ser enviadas.`;
-      }
-      Alert.alert("Reporte enviado", mensagem, [{ text: "OK", onPress: () => router.back() }]);
+      Alert.alert("Reporte enviado", montarMensagemDeSucesso(resultado), [
+        { text: "OK", onPress: () => router.back() },
+      ]);
     } catch (erro) {
       console.error("Falha ao gravar o reporte", erro);
-      const codigo = (erro as { code?: string }).code;
-      Alert.alert(
-        "Não foi possível enviar",
-        codigo === "permission-denied"
-          ? "Sem permissão para gravar. Confira se as regras de segurança do Firestore foram publicadas."
-          : "Verifique sua conexão e tente novamente."
-      );
+      Alert.alert("Não foi possível enviar", montarMensagemDeErro(erro));
     } finally {
       setEnviando(false);
     }
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      <View style={styles.cabecalho}>
+    <SafeAreaView style={estilos.container} edges={["top", "bottom"]}>
+      <View style={estilos.cabecalho}>
         <Pressable
           onPress={() => router.back()}
           hitSlop={12}
-          style={styles.fechar}
+          style={estilos.fechar}
           accessibilityLabel="Fechar"
         >
           <Feather name="x" size={22} color={cores.preto} />
         </Pressable>
-        <Text style={styles.titulo}>Novo reporte</Text>
+        <Text style={estilos.titulo}>Novo reporte</Text>
       </View>
 
       <KeyboardAvoidingView
@@ -303,22 +324,22 @@ export default function NovoReporte() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.conteudo}
+          contentContainerStyle={estilos.conteudo}
           keyboardShouldPersistTaps="handled"
         >
           <Etapas />
 
-          <Text style={styles.rotulo}>1. Tipo de ocorrência *</Text>
-          <View style={styles.chips}>
+          <Text style={estilos.rotulo}>1. Tipo de ocorrência *</Text>
+          <View style={estilos.chips}>
             {(Object.keys(TIPOS) as TipoOcorrencia[]).map((valor) => {
               const ativo = tipo === valor;
               return (
                 <Pressable
                   key={valor}
                   onPress={() => setTipo(valor)}
-                  style={[styles.chip, ativo && styles.chipAtivo]}
+                  style={[estilos.chip, ativo && estilos.chipAtivo]}
                 >
-                  <Text style={[styles.chipTexto, ativo && styles.chipTextoAtivo]}>
+                  <Text style={[estilos.chipTexto, ativo && estilos.chipTextoAtivo]}>
                     {TIPOS[valor].rotulo}
                   </Text>
                 </Pressable>
@@ -326,11 +347,11 @@ export default function NovoReporte() {
             })}
           </View>
 
-          <Text style={styles.rotulo}>
+          <Text style={estilos.rotulo}>
             {tipo === "outro" ? "2. Descrição *" : "2. Descrição (opcional)"}
           </Text>
           <TextInput
-            style={styles.descricao}
+            style={estilos.descricao}
             value={descricao}
             onChangeText={setDescricao}
             placeholder={
@@ -343,59 +364,59 @@ export default function NovoReporte() {
             textAlignVertical="top"
           />
 
-          <Text style={styles.rotulo}>
-            3. Fotos do problema * ({fotos.length}/{MAX_FOTOS})
+          <Text style={estilos.rotulo}>
+            3. Fotos do problema * ({fotosDoProblema.length}/{MAX_FOTOS})
           </Text>
           <ListaFotos
-            uris={fotos}
+            uris={fotosDoProblema}
             max={MAX_FOTOS}
             textoVazio="Toque para tirar a foto"
-            onAdicionar={() => tirarFoto(setFotos)}
-            onRemover={(i) => setFotos((f) => f.filter((_, j) => j !== i))}
+            onAdicionar={() => tirarFoto(setFotosDoProblema)}
+            onRemover={(i) => setFotosDoProblema((f) => f.filter((_, j) => j !== i))}
           />
 
-          <Text style={styles.rotulo}>
-            4. Fotos de referência (opcional) ({fotosReferencia.length}/
+          <Text style={estilos.rotulo}>
+            4. Fotos de referência (opcional) ({fotosDeReferencia.length}/
             {MAX_FOTOS_REFERENCIA})
           </Text>
           <ListaFotos
-            uris={fotosReferencia}
+            uris={fotosDeReferencia}
             max={MAX_FOTOS_REFERENCIA}
             tracejado
             textoVazio="Ponto próximo para localizar o problema"
-            onAdicionar={() => tirarFoto(setFotosReferencia)}
+            onAdicionar={() => tirarFoto(setFotosDeReferencia)}
             onRemover={(i) =>
-              setFotosReferencia((f) => f.filter((_, j) => j !== i))
+              setFotosDeReferencia((f) => f.filter((_, j) => j !== i))
             }
           />
 
-          <Text style={styles.rotulo}>5. Localização</Text>
-          <View style={styles.mapa}>
+          <Text style={estilos.rotulo}>5. Localização</Text>
+          <View style={estilos.mapa}>
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
               <MapaView coordenadas={coordenadas} style={StyleSheet.absoluteFill} />
             </View>
-            <View style={styles.pino} pointerEvents="none">
+            <View style={estilos.pino} pointerEvents="none">
               <Feather name="map-pin" size={32} color="#dc2626" />
             </View>
           </View>
-          <View style={styles.endereco}>
+          <View style={estilos.endereco}>
             <Feather name="map-pin" size={18} color={cores.cinzaEscuro} />
-            <Text style={styles.enderecoTexto} numberOfLines={1}>
+            <Text style={estilos.enderecoTexto} numberOfLines={1}>
               {endereco}
             </Text>
           </View>
 
-          <Text style={styles.rotulo}>Severidade</Text>
-          <View style={styles.chips}>
+          <Text style={estilos.rotulo}>Severidade</Text>
+          <View style={estilos.chips}>
             {SEVERIDADES.map(({ valor, rotulo }) => {
               const ativa = severidade === valor;
               return (
                 <Pressable
                   key={valor}
                   onPress={() => setSeveridade(valor)}
-                  style={[styles.chip, ativa && styles.chipAtivo]}
+                  style={[estilos.chip, ativa && estilos.chipAtivo]}
                 >
-                  <Text style={[styles.chipTexto, ativa && styles.chipTextoAtivo]}>
+                  <Text style={[estilos.chipTexto, ativa && estilos.chipTextoAtivo]}>
                     {rotulo}
                   </Text>
                 </Pressable>
@@ -407,11 +428,11 @@ export default function NovoReporte() {
             onPress={enviar}
             disabled={enviando || processandoFoto}
             style={({ pressed }) => [
-              styles.botao,
+              estilos.botao,
               (pressed || enviando) && { backgroundColor: cores.verdeEscuro },
             ]}
           >
-            <Text style={styles.botaoTexto}>
+            <Text style={estilos.botaoTexto}>
               {enviando ? "Enviando..." : processandoFoto ? "Processando foto..." : "Enviar reporte"}
             </Text>
           </Pressable>
@@ -423,7 +444,7 @@ export default function NovoReporte() {
 
 const BORDA = "#dfe4ea";
 
-const styles = StyleSheet.create({
+const estilos = StyleSheet.create({
   container: { flex: 1, backgroundColor: cores.bgBrancoGelo },
   cabecalho: {
     height: 56,

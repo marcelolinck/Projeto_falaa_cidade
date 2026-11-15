@@ -1,12 +1,14 @@
-import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import { ImageManipulator, ImageRef, SaveFormat } from "expo-image-manipulator";
 
 // Limite de tamanho de cada foto depois de comprimida: 1 MB.
 export const LIMITE_FOTO_BYTES = 1024 * 1024;
 
 // Do maior para o menor: tentamos primeiro a melhor resolução e só vamos
 // diminuindo se a foto ainda passar de 1 MB.
-const LADOS_MAXIMOS = [1600, 1280, 1024, 800]; // pixels do lado maior
-const QUALIDADES = [0.8, 0.7, 0.6, 0.5]; // 1 = sem compressão, 0 = máxima compressão
+const LADOS_MAXIMOS_EM_PIXELS = [1600, 1280, 1024, 800];
+
+// Qualidade do JPEG: 1 = sem compressão, 0 = compressão máxima.
+const QUALIDADES_JPEG = [0.8, 0.7, 0.6, 0.5];
 
 export type FotoComprimida = {
   uri: string;
@@ -15,68 +17,74 @@ export type FotoComprimida = {
   tamanhoBytes: number;
 };
 
-/** Descobre o tamanho (em bytes) de um arquivo local lendo-o como blob. */
-async function tamanhoDoArquivo(uri: string): Promise<number> {
+/** Descobre o tamanho (em bytes) de um arquivo local, lendo-o como blob. */
+async function descobrirTamanhoEmBytes(uri: string): Promise<number> {
   const resposta = await fetch(uri);
-  const blob = await resposta.blob();
-  return blob.size;
+  const conteudo = await resposta.blob();
+  return conteudo.size;
+}
+
+/**
+ * Reduz a foto para que o lado maior tenha no máximo `ladoMaximo` pixels,
+ * mantendo a proporção. Se a foto já é menor que isso, não mexe no tamanho:
+ * nunca aumentamos uma foto.
+ */
+async function redimensionarFoto(uri: string, ladoMaximo: number): Promise<ImageRef> {
+  // Renderização sem alterações, só para ler a largura e a altura originais.
+  const original = await ImageManipulator.manipulate(uri).renderAsync();
+  const ladoMaiorOriginal = Math.max(original.width, original.height);
+
+  if (ladoMaiorOriginal <= ladoMaximo) {
+    return original;
+  }
+
+  const fotoEmPe = original.height > original.width;
+  const novoTamanho = fotoEmPe ? { height: ladoMaximo } : { width: ladoMaximo };
+  return ImageManipulator.manipulate(uri).resize(novoTamanho).renderAsync();
+}
+
+/** Salva a imagem como JPEG na qualidade indicada e mede o arquivo gerado. */
+async function salvarComoJpeg(imagem: ImageRef, qualidade: number): Promise<FotoComprimida> {
+  const arquivo = await imagem.saveAsync({ compress: qualidade, format: SaveFormat.JPEG });
+  const tamanhoBytes = await descobrirTamanhoEmBytes(arquivo.uri);
+
+  return {
+    uri: arquivo.uri,
+    largura: arquivo.width,
+    altura: arquivo.height,
+    tamanhoBytes,
+  };
 }
 
 /**
  * Reduz a foto para caber em até 1 MB, qualquer que seja a câmera do celular.
  *
- * 1. Limita o lado maior (1600 px). Fotos de 12 MP+ viram ~2 MP, mais que
- *    suficiente para enxergar o buraco na tela.
- * 2. Salva em JPEG com qualidade 0.8 e confere o tamanho do arquivo.
- * 3. Se ainda passar de 1 MB, baixa a qualidade; se mesmo assim passar,
- *    reduz também a resolução, e repete.
+ * Para cada resolução (da maior para a menor) tenta cada qualidade (da melhor
+ * para a pior) e devolve a primeira foto que couber no limite. Assim a foto
+ * fica com a melhor aparência possível dentro de 1 MB.
  *
- * Como a imagem é regravada, os metadados EXIF (ex.: GPS embutido na foto)
- * não vão junto — importante para a privacidade (RNF07).
+ * Como a imagem é regravada, os metadados EXIF (ex.: GPS embutido na foto) não
+ * vão junto. Isso protege a privacidade do usuário (RNF07).
  */
-export async function comprimirImagem(uri: string): Promise<FotoComprimida> {
-  // Renderização "pura", só para saber a largura e a altura originais.
-  const original = await ImageManipulator.manipulate(uri).renderAsync();
-  const ladoMaiorOriginal = Math.max(original.width, original.height);
-  const retrato = original.height >= original.width;
+export async function comprimirFoto(uri: string): Promise<FotoComprimida> {
+  let ultimaTentativa: FotoComprimida | null = null;
 
-  let ultima: FotoComprimida | null = null;
+  for (const ladoMaximo of LADOS_MAXIMOS_EM_PIXELS) {
+    const imagem = await redimensionarFoto(uri, ladoMaximo);
 
-  for (const lado of LADOS_MAXIMOS) {
-    // Nunca aumenta a foto: se ela já é menor que `lado`, mantém o tamanho.
-    const redimensionar =
-      ladoMaiorOriginal > lado
-        ? retrato
-          ? { height: lado }
-          : { width: lado }
-        : {};
-    const imagem = await ImageManipulator.manipulate(uri)
-      .resize(redimensionar)
-      .renderAsync();
+    for (const qualidade of QUALIDADES_JPEG) {
+      ultimaTentativa = await salvarComoJpeg(imagem, qualidade);
 
-    for (const qualidade of QUALIDADES) {
-      const salva = await imagem.saveAsync({
-        compress: qualidade,
-        format: SaveFormat.JPEG,
-      });
-      const tamanhoBytes = await tamanhoDoArquivo(salva.uri);
-      ultima = {
-        uri: salva.uri,
-        largura: salva.width,
-        altura: salva.height,
-        tamanhoBytes,
-      };
-      if (tamanhoBytes <= LIMITE_FOTO_BYTES) return ultima;
+      if (ultimaTentativa.tamanhoBytes <= LIMITE_FOTO_BYTES) {
+        return ultimaTentativa;
+      }
     }
   }
 
-  // Muito improvável: devolve a menor versão que conseguimos gerar.
-  return ultima!;
-}
-
-/** Formata bytes para exibir: 734 KB, 1.2 MB. */
-export function formatarTamanho(bytes: number): string {
-  return bytes >= 1024 * 1024
-    ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-    : `${Math.round(bytes / 1024)} KB`;
+  // Muito improvável (exigiria uma foto gigante mesmo em 800 px e qualidade 0.5):
+  // devolvemos a menor versão que foi possível gerar.
+  if (!ultimaTentativa) {
+    throw new Error("Não foi possível comprimir a foto.");
+  }
+  return ultimaTentativa;
 }

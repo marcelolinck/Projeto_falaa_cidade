@@ -1,30 +1,38 @@
-import { db } from "@/firebase-config";
+import { bancoDeDados } from "@/firebase-config";
 import { User } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 /**
  * Garante que o notificante (quem reporta) tem cadastro em `usuarios/{uid}`.
- * Se já existe, não mexe em nada. Se não existe, cria com o papel `citizen`.
+ * Se já existe, não mexe em nada. Se não existe, cria com o papel "cidadao".
  *
- * As regras de segurança só deixam o app criar o documento com role "citizen",
- * cityId/departmentId nulos e status "active": ninguém consegue se cadastrar
- * já como prefeitura. O `reportsCount` é atualizado depois por Cloud Function.
+ * As regras de segurança só deixam o app criar o documento com papel "cidadao",
+ * idCidade e idDepartamento nulos e situação "ativo": ninguém consegue se
+ * cadastrar já como prefeitura. O contador `quantidadeReportes` é atualizado
+ * depois por uma Cloud Function; o app cria com zero.
  */
-export async function garantirUsuario(usuario: User): Promise<void> {
-  const referencia = doc(db, "usuarios", usuario.uid);
-  const existente = await getDoc(referencia);
-  if (existente.exists()) return;
+export async function garantirCadastroDoNotificante(usuarioLogado: User): Promise<void> {
+  const documentoDoUsuario = doc(bancoDeDados, "usuarios", usuarioLogado.uid);
 
-  await setDoc(referencia, {
-    displayName: usuario.displayName ?? null,
-    email: usuario.email ?? null,
-    photoURL: usuario.photoURL ?? null,
-    role: "citizen",
-    cityId: null,
-    departmentId: null,
-    status: "active",
-    notificationPrefs: { statusChange: true, comments: true, channel: "push" },
-    reportsCount: 0,
-    createdAt: serverTimestamp(),
+  const cadastroExistente = await getDoc(documentoDoUsuario);
+  if (cadastroExistente.exists()) {
+    return;
+  }
+
+  await setDoc(documentoDoUsuario, {
+    nomeExibicao: usuarioLogado.displayName ?? null,
+    email: usuarioLogado.email ?? null,
+    urlFoto: usuarioLogado.photoURL ?? null,
+    papel: "cidadao",
+    idCidade: null,
+    idDepartamento: null,
+    situacao: "ativo",
+    preferenciasNotificacao: {
+      mudancaSituacao: true,
+      comentarios: true,
+      canal: "aplicativo", // "aplicativo", "email" ou "ambos"
+    },
+    quantidadeReportes: 0,
+    criadoEm: serverTimestamp(),
   });
 }
