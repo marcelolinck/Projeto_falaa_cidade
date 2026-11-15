@@ -52,6 +52,17 @@ Bônus: como a imagem é regravada, o **EXIF** (GPS embutido na foto) é descart
 
 ---
 
+## Por que a foto não usa `uploadBytes` do Firebase
+
+No React Native o SDK do Firebase precisa montar um `Blob` a partir dos bytes da foto, e o React Native não consegue. Dois sintomas que aparecem:
+
+- `Creating blobs from 'ArrayBuffer' and 'ArrayBufferView' are not supported` ao enviar os bytes da foto;
+- arquivo de **14 bytes** no Storage ao usar `fetch(uri).blob()`: o envio não dá erro, mas grava o arquivo quase vazio.
+
+A solução é `enviarFoto()` (`services/fotos.ts`): o arquivo vai direto pela rede nativa (`File.upload` do `expo-file-system`) para a API REST do Storage, com o token do usuário logado. As regras de segurança continuam valendo do mesmo jeito. Ao final, o app compara o tamanho gravado com o do arquivo; se for diferente, a foto conta como falha.
+
+---
+
 ## Regra de nomes: tudo em português
 
 Coleções, **campos**, papéis, valores, funções e variáveis são escritos em português, para que qualquer pessoa entenda o código e o banco de dados só de olhar. Ficam como estão só nomes técnicos universais: `uid`, `url`, `email`, `geohash` e os tipos do Firebase (`GeoPoint`, `Timestamp`).
@@ -62,10 +73,11 @@ Coleções, **campos**, papéis, valores, funções e variáveis são escritos e
 
 | Arquivo | O que faz |
 |---|---|
-| `firebase-config.ts` | Exporta `bancoDeDados` (Firestore) e `armazenamento` (Storage; vale `null` se não houver bucket). |
+| `firebase-config.ts` | Exporta `bancoDeDados` (Firestore) e `nomeDoBucket` (vale `null` se não houver bucket no `.env`). |
 | `context/cidade-context.tsx` | Guarda cidade, UF, `codigoIbge`, coordenadas e a `situacao` da busca da localização. |
 | `services/usuarios.ts` | `garantirCadastroDoNotificante()`: cria `usuarios/{uid}` com papel `cidadao` se não existir. |
 | `services/reportes.ts` | `enviarReporte()` e as funções de cada passo: `criarOcorrencia`, `enviarGrupoDeFotos`, `anexarFotosNaOcorrencia`. |
+| `services/fotos.ts` | `enviarFoto()`: envia uma foto ao Storage pela rede nativa do celular e confere o tamanho gravado. |
 | `utils/imagem.ts` | `comprimirFoto()`: foto de até 1 MB. |
 | `utils/geohash.ts` | `gerarGeohash()`: texto da área, para buscas por proximidade (RF09). |
 | `utils/municipios.ts` | `buscarCodigoIbge()`: acha o código IBGE de 7 dígitos pela UF + nome. |

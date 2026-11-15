@@ -3,7 +3,6 @@ import { getApp, getApps, initializeApp } from "firebase/app";
 // @ts-ignore - tipos do firebase/auth não expõem getReactNativePersistence p/ RN, mas existe em runtime no build nativo (iOS/Android)
 import { getAuth, getReactNativePersistence, initializeAuth } from "firebase/auth";
 import { getFirestore, initializeFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
 import { Platform } from "react-native";
 
 const firebaseConfig = {
@@ -43,7 +42,7 @@ function iniciarBancoDeDados() {
 
 export const bancoDeDados = iniciarBancoDeDados();
 
-// Storage: armazenamento das fotos. Só existe se a variável
-// EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET estiver preenchida no .env.
-// Sem ela vale `null`: o app grava a ocorrência normalmente, só sem as fotos.
-export const armazenamento = firebaseConfig.storageBucket ? getStorage(app) : null;
+// Nome do bucket do Storage (onde ficam as fotos), vindo do .env.
+// Se a variável EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET estiver vazia o valor é
+// `null`: o app grava a ocorrência normalmente, só sem as fotos.
+export const nomeDoBucket: string | null = firebaseConfig.storageBucket || null;
