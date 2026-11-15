@@ -1,4 +1,5 @@
 import { siglaDoEstado } from "@/constants/estados";
+import { buscarCodigoIbge } from "@/utils/municipios";
 import * as Location from "expo-location";
 import {
   createContext,
@@ -16,6 +17,7 @@ export type StatusCidade = "carregando" | "pronto" | "negado" | "erro";
 type CidadeContextType = {
   cidade: string | null; // ex.: "Cuiabá"
   uf: string | null; // ex.: "MT"
+  codigoIbge: string | null; // ex.: "5107909" (Sinop), identifica a cidade no banco
   coordenadas: Coordenadas | null; // posição do usuário
   status: StatusCidade;
   atualizar: () => Promise<void>; // pede a localização de novo
@@ -24,6 +26,7 @@ type CidadeContextType = {
 export const CidadeContext = createContext<CidadeContextType>({
   cidade: null,
   uf: null,
+  codigoIbge: null,
   coordenadas: null,
   status: "carregando",
   atualizar: async () => {},
@@ -37,6 +40,7 @@ export const CidadeContext = createContext<CidadeContextType>({
 export function CidadeProvider({ children }: { children: ReactNode }) {
   const [cidade, setCidade] = useState<string | null>(null);
   const [uf, setUf] = useState<string | null>(null);
+  const [codigoIbge, setCodigoIbge] = useState<string | null>(null);
   const [coordenadas, setCoordenadas] = useState<Coordenadas | null>(null);
   const [status, setStatus] = useState<StatusCidade>("carregando");
 
@@ -64,11 +68,15 @@ export function CidadeProvider({ children }: { children: ReactNode }) {
       // ainda abre no lugar certo, só o título fica sem o nome da cidade.
       try {
         const [lugar] = await Location.reverseGeocodeAsync(aqui);
+        const siglaUf = siglaDoEstado(lugar?.region ?? null);
         setCidade(lugar?.city ?? lugar?.subregion ?? null);
-        setUf(siglaDoEstado(lugar?.region ?? null));
+        setUf(siglaUf);
+        // Cidade do GPS -> código oficial do IBGE (tabela embutida no app).
+        setCodigoIbge(buscarCodigoIbge([lugar?.city, lugar?.subregion], siglaUf));
       } catch {
         setCidade(null);
         setUf(null);
+        setCodigoIbge(null);
       }
 
       setStatus("pronto");
@@ -82,7 +90,7 @@ export function CidadeProvider({ children }: { children: ReactNode }) {
   }, [atualizar]);
 
   return (
-    <CidadeContext.Provider value={{ cidade, uf, coordenadas, status, atualizar }}>
+    <CidadeContext.Provider value={{ cidade, uf, codigoIbge, coordenadas, status, atualizar }}>
       {children}
     </CidadeContext.Provider>
   );

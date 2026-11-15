@@ -163,7 +163,7 @@ function ListaFotos({
 export default function NovoReporte() {
   const router = useRouter();
   const { user } = useAuth();
-  const { coordenadas, cidade, uf } = useCidade();
+  const { coordenadas, codigoIbge, atualizar } = useCidade();
 
   const [tipo, setTipo] = useState<TipoOcorrencia>("buraco");
   const [fotos, setFotos] = useState<string[]>([]);
@@ -234,6 +234,15 @@ export default function NovoReporte() {
       return;
     }
 
+    if (!codigoIbge) {
+      Alert.alert(
+        "Cidade não identificada",
+        "Não conseguimos identificar sua cidade. Confira se a localização está ativa e tente novamente.",
+        [{ text: "Tentar de novo", onPress: atualizar }, { text: "Cancelar", style: "cancel" }]
+      );
+      return;
+    }
+
     setEnviando(true);
     try {
       // O endereço só vai se foi realmente encontrado (não o texto de aviso).
@@ -249,8 +258,7 @@ export default function NovoReporte() {
         severidade,
         coordenadas,
         endereco: enderecoEncontrado,
-        cidade,
-        uf,
+        codigoIbge,
         fotos,
         fotosReferencia,
       });

@@ -2,7 +2,6 @@ import { Coordenadas } from "@/context/cidade-context";
 import { db, storage } from "@/firebase-config";
 import { garantirUsuario } from "@/services/usuarios";
 import { Severidade, TipoOcorrencia } from "@/types/ocorrencia";
-import { gerarCidadeId } from "@/utils/cidade-id";
 import { gerarGeohash } from "@/utils/geohash";
 import { User } from "firebase/auth";
 import {
@@ -29,8 +28,7 @@ export type DadosReporte = {
   severidade: Severidade;
   coordenadas: Coordenadas;
   endereco: string | null;
-  cidade: string | null;
-  uf: string | null;
+  codigoIbge: string; // código IBGE da cidade (7 dígitos), vira o cityId
   fotos: string[]; // fotos do problema (já comprimidas), até 5
   fotosReferencia: string[]; // fotos de referência (já comprimidas), até 2
 };
@@ -95,7 +93,7 @@ export async function enviarReporte(dados: DadosReporte): Promise<ResultadoRepor
   // Passo 1: documento da ocorrência.
   const documento = await addDoc(collection(db, "ocorrencias"), {
     reporterId: usuario.uid,
-    cityId: gerarCidadeId(dados.cidade, dados.uf),
+    cityId: dados.codigoIbge,
     departmentId: null,
     type: dados.tipo,
     location: new GeoPoint(coordenadas.latitude, coordenadas.longitude),

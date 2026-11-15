@@ -20,6 +20,24 @@ Até aqui o botão **Enviar reporte** só fingia que enviava. Agora ele grava de
 
 ---
 
+## Identificação da cidade pelo código do IBGE
+
+O app descobre a cidade em 3 passos, todos no celular:
+
+```
+GPS ──▶ reverseGeocodeAsync ──▶ "Sinop" + "MT" ──▶ tabela do IBGE ──▶ 5107909
+```
+
+1. O GPS dá as coordenadas e o geocoder devolve cidade e estado (o estado vira sigla em `constants/estados.ts`).
+2. `buscarCodigoIbge()` procura **UF + nome** na tabela do IBGE. Precisa da UF porque existem cidades com o mesmo nome em estados diferentes. A comparação ignora acentos e maiúsculas.
+3. O código vira o `cityId` da ocorrência (e será o id do documento em `cidades/{codigoIbge}`).
+
+Se a cidade não for encontrada, o app **não deixa enviar** e oferece "Tentar de novo": sem o código a ocorrência ficaria sem cidade e não apareceria nas consultas.
+
+**Origem da tabela:** IBGE, API de Localidades (`servicodados.ibge.gov.br/api/v1/localidades/municipios`), edição 2026, obtida pelo pacote `@br-geo-kit/ibge`. Para atualizar, baixe a lista nova e regere o JSON no mesmo formato.
+
+---
+
 ## Compressão da foto (`utils/imagem.ts`)
 
 Cada celular tira fotos de um tamanho. Ao tirar a foto, `comprimirImagem()` reduz para **até 1 MB**:
@@ -38,12 +56,14 @@ Bônus: como a imagem é regravada, o **EXIF** (GPS embutido na foto) é descart
 
 | Arquivo | O que faz |
 |---|---|
+| `context/cidade-context.tsx` | Além de cidade e UF, agora guarda o `codigoIbge` da cidade do usuário. |
 | `firebase-config.ts` | Exporta `db` (Firestore) e `storage` (nulo se não houver bucket). |
 | `services/usuarios.ts` | `garantirUsuario()`: cria `usuarios/{uid}` com papel `citizen` se não existir. |
 | `services/reportes.ts` | `enviarReporte()`: os 3 passos acima. |
 | `utils/imagem.ts` | `comprimirImagem()`: foto de até 1 MB. |
 | `utils/geohash.ts` | `gerarGeohash()`: texto da área, para buscas por proximidade (RF09). |
-| `utils/cidade-id.ts` | `gerarCidadeId("Cuiabá", "MT")` → `cuiaba-mt` (provisório). |
+| `constants/municipios-ibge.json` | Tabela oficial do IBGE: 5.571 municípios no formato `[código, nome, UF]` (179 KB, vai dentro do app). |
+| `utils/municipios.ts` | `buscarCodigoIbge([cidade], uf)`: acha o código IBGE de 7 dígitos pela UF + nome. |
 | `app/novo-reporte.tsx` | Comprime ao tirar a foto e chama `enviarReporte()` no botão. |
 | `firebase/firestore.rules` | Regras do Firestore (para colar no console). |
 | `firebase/storage.rules` | Regras do Storage (para colar no console). |
@@ -57,7 +77,7 @@ Nomes dos **campos** em inglês (como no modelo de dados); variáveis do código
 | Campo | Valor |
 |---|---|
 | `reporterId` | uid de quem reportou |
-| `cityId` | `cuiaba-mt` (provisório) |
+| `cityId` | código IBGE da cidade, ex.: `5107909` (Sinop), `5103403` (Cuiabá) |
 | `type` | `buraco`, `calcada`, `iluminacao` ou `outro` |
 | `location` / `geohash` | GeoPoint e texto da área |
 | `address`, `description` | texto, ou `null` |
@@ -91,6 +111,7 @@ Sem as regras novas o app recebe `permission-denied` (as regras antigas usavam o
 - [ ] Logado, criar um reporte com 1 ou 2 fotos.
 - [ ] Console → Firestore: aparecem `usuarios/{uid}` e `ocorrencias/{id}` com `photos.pothole` preenchido.
 - [ ] Console → Storage: arquivos em `ocorrencias/{id}/pothole/1.jpg`, cada um com **menos de 1 MB**.
+- [ ] No documento, `cityId` é o código do IBGE da sua cidade (7 dígitos).
 - [ ] Sem login: o app pede para entrar.
 - [ ] Bucket vazio: o reporte grava e o aviso de fotos aparece.
 
