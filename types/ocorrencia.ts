@@ -1,5 +1,7 @@
 export type StatusOcorrencia = "aberto" | "em_execucao" | "resolvido";
 
+export type Severidade = "leve" | "moderado" | "grave";
+
 export type TipoOcorrencia = "buraco" | "calcada" | "iluminacao" | "outro";
 
 export type Ocorrencia = {

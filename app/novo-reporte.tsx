@@ -1,8 +1,11 @@
 import { MapaView } from "@/components/mapa-view";
 import { TIPOS } from "@/constants/tipos";
+import { useAuth } from "@/hooks/use-auth";
 import { useCidade } from "@/hooks/use-cidade";
+import { enviarReporte } from "@/services/reportes";
 import { cores } from "@/styles";
-import { TipoOcorrencia } from "@/types/ocorrencia";
+import { Severidade, TipoOcorrencia } from "@/types/ocorrencia";
+import { comprimirImagem } from "@/utils/imagem";
 import { Feather } from "@react-native-vector-icons/feather";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
@@ -21,8 +24,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-type Severidade = "leve" | "moderado" | "grave";
 
 const SEVERIDADES: { valor: Severidade; rotulo: string }[] = [
   { valor: "leve", rotulo: "Leve" },
@@ -161,7 +162,8 @@ function ListaFotos({
 
 export default function NovoReporte() {
   const router = useRouter();
-  const { coordenadas } = useCidade();
+  const { user } = useAuth();
+  const { coordenadas, cidade, uf } = useCidade();
 
   const [tipo, setTipo] = useState<TipoOcorrencia>("buraco");
   const [fotos, setFotos] = useState<string[]>([]);
@@ -170,6 +172,7 @@ export default function NovoReporte() {
   const [severidade, setSeveridade] = useState<Severidade>("moderado");
   const [descricao, setDescricao] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [processandoFoto, setProcessandoFoto] = useState(false);
 
   // Converte as coordenadas do usuário em "Rua, número — Bairro".
   useEffect(() => {
@@ -190,15 +193,26 @@ export default function NovoReporte() {
   }, [coordenadas]);
 
   async function tirarFoto(definir: Dispatch<SetStateAction<string[]>>) {
+    if (processandoFoto) return;
     const { granted } = await ImagePicker.requestCameraPermissionsAsync();
     if (!granted) {
       Alert.alert("Permissão negada", "Libere o acesso à câmera nas configurações.");
       return;
     }
     const resultado = await ImagePicker.launchCameraAsync({ quality: 0.7 });
-    if (!resultado.canceled) {
-      const uri = resultado.assets[0].uri;
-      definir((atuais) => [...atuais, uri]);
+    if (resultado.canceled) return;
+
+    // Cada câmera gera uma foto de tamanho diferente. Aqui ela é reduzida para
+    // no máximo 1 MB antes de aparecer na tela e de ser enviada.
+    setProcessandoFoto(true);
+    try {
+      const foto = await comprimirImagem(resultado.assets[0].uri);
+      definir((atuais) => [...atuais, foto.uri]);
+    } catch (erro) {
+      console.warn("Falha ao comprimir a foto", erro);
+      Alert.alert("Não foi possível usar a foto", "Tente tirar a foto novamente.");
+    } finally {
+      setProcessandoFoto(false);
     }
   }
 
@@ -211,14 +225,55 @@ export default function NovoReporte() {
       Alert.alert("Descrição obrigatória", "Descreva o problema que você encontrou.");
       return;
     }
+    if (!user) {
+      Alert.alert("Login necessário", "Entre com a sua conta para reportar um problema.");
+      return;
+    }
+    if (!coordenadas) {
+      Alert.alert("Localização indisponível", "Ative a localização para registrar onde está o problema.");
+      return;
+    }
+
     setEnviando(true);
-    // TODO: enviar para a API quando ela existir (tipo, fotos, fotosReferencia,
-    // coordenadas, endereco, severidade, descricao).
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    setEnviando(false);
-    Alert.alert("Reporte enviado", "Obrigado por ajudar sua cidade!", [
-      { text: "OK", onPress: () => router.back() },
-    ]);
+    try {
+      // O endereço só vai se foi realmente encontrado (não o texto de aviso).
+      const enderecoEncontrado =
+        endereco === "Buscando endereço..." || endereco === "Endereço não encontrado"
+          ? null
+          : endereco;
+
+      const resultado = await enviarReporte({
+        usuario: user,
+        tipo,
+        descricao,
+        severidade,
+        coordenadas,
+        endereco: enderecoEncontrado,
+        cidade,
+        uf,
+        fotos,
+        fotosReferencia,
+      });
+
+      let mensagem = "Obrigado por ajudar sua cidade!";
+      if (!resultado.storageAtivo) {
+        mensagem += "\n\nAs fotos ainda não foram enviadas porque o Storage não está configurado.";
+      } else if (resultado.fotosComFalha > 0) {
+        mensagem += `\n\n${resultado.fotosComFalha} foto(s) não puderam ser enviadas.`;
+      }
+      Alert.alert("Reporte enviado", mensagem, [{ text: "OK", onPress: () => router.back() }]);
+    } catch (erro) {
+      console.error("Falha ao gravar o reporte", erro);
+      const codigo = (erro as { code?: string }).code;
+      Alert.alert(
+        "Não foi possível enviar",
+        codigo === "permission-denied"
+          ? "Sem permissão para gravar. Confira se as regras de segurança do Firestore foram publicadas."
+          : "Verifique sua conexão e tente novamente."
+      );
+    } finally {
+      setEnviando(false);
+    }
   }
 
   return (
@@ -342,14 +397,14 @@ export default function NovoReporte() {
 
           <Pressable
             onPress={enviar}
-            disabled={enviando}
+            disabled={enviando || processandoFoto}
             style={({ pressed }) => [
               styles.botao,
               (pressed || enviando) && { backgroundColor: cores.verdeEscuro },
             ]}
           >
             <Text style={styles.botaoTexto}>
-              {enviando ? "Enviando..." : "Enviar reporte"}
+              {enviando ? "Enviando..." : processandoFoto ? "Processando foto..." : "Enviar reporte"}
             </Text>
           </Pressable>
         </ScrollView>

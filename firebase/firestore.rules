@@ -1,0 +1,193 @@
+rules_version = '2';
+
+// Regras do Firestore — Falaa Cidade.
+// Baseadas em claude/modelo-dados-firebase.md (coleções em português).
+// Como publicar: Console do Firebase > Firestore Database > Regras > colar > Publicar.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============ Funções auxiliares ============
+
+    function logado() {
+      return request.auth != null;
+    }
+
+    function temPapel(papel) {
+      return logado() && request.auth.token.role == papel;
+    }
+
+    function ehAdmin() {
+      return temPapel('admin');
+    }
+
+    function ehModerador() {
+      return temPapel('moderator') || ehAdmin();
+    }
+
+    function ehDono(uid) {
+      return logado() && request.auth.uid == uid;
+    }
+
+    // Prefeitura só age na própria cidade. Quando a ocorrência ainda não tem
+    // órgão (departmentId nulo), ela "reconhece" e grava o próprio órgão;
+    // depois disso só o mesmo órgão continua mexendo.
+    function ehPrefeituraDaOcorrencia(antes, depois) {
+      return temPapel('city_official')
+        && request.auth.token.cityId == antes.cityId
+        && (antes.departmentId == null
+              ? depois.departmentId == request.auth.token.departmentId
+              : antes.departmentId == request.auth.token.departmentId
+                && depois.departmentId == antes.departmentId);
+    }
+
+    // 'confirmada' e 'reaberta' NUNCA aparecem aqui: só Cloud Function grava.
+    function transicaoValida(statusAntes, statusDepois) {
+      return (statusAntes == 'aberta'      && statusDepois == 'reconhecida')
+          || (statusAntes == 'reconhecida' && statusDepois == 'em_execucao')
+          || (statusAntes == 'em_execucao' && statusDepois == 'resolvida');
+    }
+
+    // ============ cidades ============
+    match /cidades/{cidadeId} {
+      allow read: if true;
+      allow write: if ehAdmin();
+
+      match /departamentos/{departamentoId} {
+        allow read: if true;
+        allow write: if ehAdmin();
+      }
+
+      match /estatisticas/resumo {
+        allow read: if true;
+        allow write: if false; // só Cloud Function (Admin SDK ignora as regras)
+      }
+    }
+
+    // ============ usuarios ============
+    match /usuarios/{uid} {
+      allow read: if logado();
+
+      // O notificante se cadastra sozinho, mas sempre como cidadão.
+      allow create: if ehDono(uid)
+        && request.resource.data.role == 'citizen'
+        && request.resource.data.cityId == null
+        && request.resource.data.departmentId == null
+        && request.resource.data.status == 'active'
+        && request.resource.data.reportsCount == 0
+        && request.resource.data.createdAt == request.time;
+
+      // role, cityId, departmentId, status e reportsCount não mudam pelo app.
+      allow update: if ehDono(uid)
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.cityId == resource.data.cityId
+        && request.resource.data.departmentId == resource.data.departmentId
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.reportsCount == resource.data.reportsCount;
+
+      allow delete: if false;
+
+      // Caixa de entrada pessoal: o app só marca como lida.
+      match /notificacoes/{notificacaoId} {
+        allow read: if ehDono(uid);
+        allow update: if ehDono(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        allow create, delete: if false; // só Cloud Function
+      }
+    }
+
+    // ============ ocorrencias ============
+    match /ocorrencias/{ocorrenciaId} {
+
+      allow read: if true; // transparência pública é objetivo central do produto
+
+      // Criação: as listas de fotos nascem vazias; as fotos entram por um
+      // update depois do upload no Storage (ver modelo de dados, seção 3.5).
+      allow create: if logado()
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.status == 'aberta'
+        && request.resource.data.location is latlng
+        && request.resource.data.type in ['buraco', 'calcada', 'iluminacao', 'outro']
+        && request.resource.data.severity in ['leve', 'moderado', 'grave']
+        && (request.resource.data.description == null
+            || (request.resource.data.description is string
+                && request.resource.data.description.size() <= 1000))
+        && request.resource.data.departmentId == null
+        && request.resource.data.resolutionTimeSeconds == null
+        && request.resource.data.confirmedAt == null
+        && request.resource.data.reopenedCount == 0
+        && request.resource.data.supportCount == 0
+        && request.resource.data.photos.pothole.size() == 0
+        && request.resource.data.photos.reference.size() == 0
+        && request.resource.data.photos.resolved.size() == 0
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if logado() && (
+
+        // (a) Prefeitura avança o status sem pular etapas e só mexe nos campos dela.
+        (
+          ehPrefeituraDaOcorrencia(resource.data, request.resource.data)
+          && transicaoValida(resource.data.status, request.resource.data.status)
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['status', 'departmentId', 'photos', 'recognizedAt', 'resolvedAt', 'updatedAt'])
+        )
+
+        // (b) Autor edita descrição/severidade ou anexa as fotos do reporte,
+        //     só enquanto a ocorrência está 'aberta'.
+        || (
+          request.auth.uid == resource.data.reporterId
+          && resource.data.status == 'aberta'
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['description', 'severity', 'photos', 'updatedAt'])
+          && request.resource.data.updatedAt == request.time
+          // até 5 fotos do problema e 2 de referência
+          && request.resource.data.photos.pothole.size() <= 5
+          && request.resource.data.photos.reference.size() <= 2
+          // fotos só entram uma vez: depois de gravadas, não são trocadas
+          && (resource.data.photos.pothole.size() == 0
+              || request.resource.data.photos.pothole == resource.data.photos.pothole)
+          && (resource.data.photos.reference.size() == 0
+              || request.resource.data.photos.reference == resource.data.photos.reference)
+          // as fotos "resolvida" são só da prefeitura
+          && request.resource.data.photos.resolved == resource.data.photos.resolved
+        )
+      );
+
+      allow delete: if false; // moderação usa soft-delete
+
+      match /historicoStatus/{eventoId} {
+        allow read: if true;
+        allow write: if false; // só Cloud Function
+      }
+
+      // docId = {uid}_{tipo}: no máximo uma confirmação de cada tipo por pessoa
+      match /confirmacoes/{confirmacaoId} {
+        allow read: if true;
+        allow create: if logado()
+          && confirmacaoId == request.auth.uid + '_' + request.resource.data.type
+          && request.resource.data.type in ['support', 'confirm_resolution', 'reopen'];
+        allow update, delete: if false;
+      }
+
+      match /comentarios/{comentarioId} {
+        allow read: if true;
+        allow create: if logado()
+          && request.resource.data.authorId == request.auth.uid;
+        allow update: if false;
+        allow delete: if request.auth.uid == resource.data.authorId || ehModerador();
+      }
+    }
+
+    // ============ denuncias ============
+    match /denuncias/{denunciaId} {
+      allow read: if ehModerador()
+        || (logado() && request.auth.uid == resource.data.reportedBy);
+      allow create: if logado()
+        && request.resource.data.reportedBy == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update: if ehModerador();
+      allow delete: if false;
+    }
+  }
+}
